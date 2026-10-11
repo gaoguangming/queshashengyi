@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>缺啥生意 · 按省进入的选址候选点位 + 财务测算演示</title>
+<!-- Leaflet（开源地图库，走 CDN；底图 OpenStreetMap，均不需要 API Key） -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --blue:#2563eb; --blue-dark:#1d4ed8; --blue-soft:#eff5ff; --bg:#f4f6fb;
+    --card:#ffffff; --line:#e6eaf2; --text:#1f2937; --muted:#6b7280;
+    --green:#22c55e; --orange:#f59e0b; --red:#ef4444;
+    --green-bg:#ecfdf3; --orange-bg:#fff8eb; --red-bg:#fef2f2;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{width:100%;max-width:600px;margin:0 auto;padding:20px 14px 24px;}
+  header{text-align:center;padding:10px 0 16px;}
+  .logo{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:var(--blue);color:#fff;font-size:17px;font-weight:700;vertical-align:-9px;margin-right:8px;}
+  h1.top{display:inline-block;margin:0;font-size:21px;font-weight:700;letter-spacing:.5px;}
+  .sub{margin:6px 0 0;color:var(--muted);font-size:13.5px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.04);}
+  .card h2{margin:0 0 14px;font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .bar{width:3px;height:15px;border-radius:2px;background:var(--blue);display:inline-block;}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px;}
+  .field{margin-bottom:14px;}
+  input,select{width:100%;padding:11px 12px;font-size:15px;color:var(--text);background:#fff;border:1px solid #d6dce8;border-radius:10px;outline:none;font-family:inherit;appearance:none;}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;}
+  input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+  .err{color:var(--red);font-size:13px;margin:8px 0 0;display:none;} .err.on{display:block;}
+  .hint{font-size:12px;color:#9aa3b2;line-height:1.6;background:#f6f9ff;border:1px solid #dce8fc;border-radius:8px;padding:8px 10px;margin:0 0 14px;}
+  button.go{width:100%;padding:13px;font-size:16px;font-weight:600;color:#fff;background:var(--blue);border:none;border-radius:10px;cursor:pointer;font-family:inherit;transition:background .15s;}
+  button.go:hover{background:var(--blue-dark);} button.go:active{transform:translateY(1px);} button.go:disabled{background:#9db6ea;cursor:not-allowed;}
+  .loading{display:none;text-align:center;padding:26px 0;color:var(--muted);font-size:14px;} .loading.on{display:block;}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:4px;animation:bl 1s infinite;}
+  .dot:nth-child(2){animation-delay:.18s;} .dot:nth-child(3){animation-delay:.36s;}
+  @keyframes bl{0%,100%{opacity:.25;}50%{opacity:1;}}
+
+  .foot-bottom{text-align:center;font-size:13px;color:#5b6472;line-height:1.6;padding:18px 14px calc(22px + env(safe-area-inset-bottom,0px));max-width:600px;margin:0 auto;}
+  .foot-bottom b{color:var(--blue-dark);} .foot-bottom .fb-sub{display:block;font-size:12px;color:#9aa3b2;margin-top:4px;}
+
+  /* ---------- 地图舞台（查看候选点位后显示） ---------- */
+  #mapStage{display:none;margin-bottom:16px;}
+  #mapStage.on{display:block;animation:fade .28s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .map-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);margin:0 2px 8px;}
+  .map-head b{color:#374151;} .map-head button{font-size:13px;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 6px;}
+  .poi-map{width:100%;height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--line);box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 14px rgba(16,24,40,.05);background:#eef1f6;position:relative;}
+  .map-note{position:absolute;left:8px;bottom:8px;z-index:500;font-size:11px;color:#6b7280;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:4px 8px;}
+  .tile-notice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:500;width:min(280px,82%);text-align:center;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12px;line-height:1.6;color:var(--muted);box-shadow:0 4px 14px rgba(16,24,40,.08);}
+  .tile-notice b{color:var(--text);font-size:13px;}
+  .spot-label{background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:11px;color:#374151;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .leaflet-popup-content-wrapper{border-radius:10px;}
+
+  /* 点位信息卡（底部上滑） */
+  .spot-card{display:none;background:#fff;border:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -6px 20px rgba(16,24,40,.12);padding:14px 16px 18px;margin-top:-14px;position:relative;z-index:600;}
+  .spot-card.on{display:block;}
+  .sc-head{font-size:16px;font-weight:700;color:#111827;display:flex;align-items:center;gap:8px;}
+  .sc-tag{font-size:11px;font-weight:600;color:#fff;background:var(--blue);border-radius:999px;padding:2px 9px;}
+  .sc-judge{font-size:13px;color:#4b5563;line-height:1.7;margin:6px 0 10px;}
+  .sc-bar{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px;}
+  .sc-bar .lab{width:64px;flex:0 0 64px;color:#6b7280;text-align:right;}
+  .sc-track{flex:1;height:10px;background:#eef1f6;border-radius:999px;overflow:hidden;}
+  .sc-fill{height:100%;border-radius:999px;}
+  .sc-val{width:40px;flex:0 0 40px;font-weight:700;}
+  .sc-meta{font-size:12.5px;color:#6b7280;margin:8px 0;display:flex;flex-wrap:wrap;gap:4px 14px;}
+  .sc-meta b{color:#374151;}
+  .sc-acts{display:flex;gap:10px;margin-top:10px;}
+  .sc-acts button{flex:1;min-height:44px;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn-fin{background:var(--blue);color:#fff;} .btn-fin:hover{background:var(--blue-dark);}
+  .btn-rep{background:#f1f3f8;color:var(--muted);}
+
+  /* ---------- 财务测算面板（右侧滑入 / 移动端底部上滑） ---------- */
+  #finPanel{position:fixed;top:0;right:0;height:100%;width:380px;max-width:92vw;background:#fff;box-shadow:-8px 0 30px rgba(16,24,40,.18);transform:translateX(100%);transition:transform .28s ease;z-index:1200;display:flex;flex-direction:column;}
+  #finPanel.on{transform:translateX(0);}
+  .fin-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);}
+  .fin-top b{font-size:15px;color:#111827;} .fin-top .x{background:none;border:none;font-size:22px;color:#9aa3b2;cursor:pointer;line-height:1;}
+  .fin-body{padding:14px 16px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;}
+  .fin-note{font-size:11.5px;color:#9aa3b2;background:#f7f8fa;border:1px dashed #e3e7ee;border-radius:8px;padding:7px 9px;margin-bottom:12px;line-height:1.5;}
+  .fin-sec-t{font-size:13px;font-weight:700;color:#374151;margin:14px 0 8px;}
+  .slider{margin-bottom:12px;}
+  .slider .sl-top{display:flex;justify-content:space-between;font-size:13px;color:#4b5563;margin-bottom:4px;}
+  .slider .sl-top b{color:var(--blue-dark);}
+  .slider input[type=range]{width:100%;accent-color:var(--blue);}
+  .fin-res{background:#f6f9ff;border:1px solid #dce8fc;border-radius:10px;padding:12px;margin-top:8px;}
+  .fin-res .r1{display:flex;justify-content:space-between;font-size:13.5px;padding:4px 0;border-bottom:1px dashed var(--line);}
+  .fin-res .r1:last-child{border-bottom:none;}
+  .fin-res .r1 b{color:#111827;}
+  .fin-res .hl{color:var(--blue-dark);font-weight:700;}
+  .scene-row{display:flex;gap:8px;margin-top:10px;}
+  .scene{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px;text-align:center;font-size:12px;}
+  .scene .sn{color:#6b7280;} .scene .sp{font-weight:700;color:#111827;font-size:13px;margin-top:2px;}
+  .scene.ok{border-color:#bbf7d0;background:var(--green-bg);} .scene.bad{border-color:#fecaca;background:var(--red-bg);}
+  .cmp-head{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+  .cmp-head b{font-size:13px;color:#374151;} .cmp-head button{font-size:12px;color:var(--blue);background:none;border:none;cursor:pointer;}
+  .cmp-cards{display:flex;gap:8px;margin-top:8px;}
+  .cmp-card{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px;font-size:11.5px;min-width:0;}
+  .cmp-card .cn{font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cmp-card .cv{color:#4b5563;margin-top:3px;}
+
+  /* ---------- 报告区 ---------- */
+  #result{width:100%;max-width:840px;margin:0 auto;padding:0 14px 40px;display:none;}
+  #result.on{display:block;}
+  .report-doc{max-width:800px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 26px 30px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05);color:#1f2937;}
+  .rep-meta{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:var(--muted);padding:9px 12px;background:#f6f9ff;border:1px solid #dce8fc;border-radius:10px;margin-bottom:18px;}
+  .rep-meta b{color:#374151;font-weight:600;}
+  .rep-cover{text-align:center;padding:14px 8px 20px;border-bottom:2px solid var(--blue);margin-bottom:18px;}
+  .rep-cover-kicker{font-size:12px;letter-spacing:2px;color:var(--blue);font-weight:600;margin-bottom:10px;}
+  .rep-title{font-size:20px;font-weight:700;line-height:1.45;margin:0 0 12px;color:#111827;}
+  .rep-cover-meta{font-size:13px;color:#4b5563;line-height:1.8;}
+  .rep-cover-disclaimer{margin-top:12px;font-size:11.5px;color:#9aa3b2;line-height:1.6;background:#f7f8fa;border:1px dashed #e3e7ee;border-radius:8px;padding:8px 10px;}
+  h2.rep-sec{font-size:17px;font-weight:700;color:#111827;margin:26px 0 12px;padding-left:11px;border-left:4px solid var(--blue);line-height:1.4;}
+  h3.rep-h3{font-size:14.5px;font-weight:600;color:#374151;margin:16px 0 8px;}
+  .rep-p{font-size:14px;line-height:1.8;color:#374151;margin:8px 0;} .rep-p b{color:#111827;}
+  .verdict{display:inline-block;font-size:15px;font-weight:700;padding:6px 16px;border-radius:999px;margin-bottom:4px;}
+  .v-go{color:#15803d;background:var(--green-bg);border:1px solid #bbf7d0;}
+  .v-watch{color:#b45309;background:var(--orange-bg);border:1px solid #fde9c8;}
+  .v-no{color:#b91c1c;background:var(--red-bg);border:1px solid #fecaca;}
+  .rep-bars{margin:14px 0 6px;}
+  .rep-bar-row{display:flex;align-items:center;gap:12px;margin:10px 0;}
+  .rep-bar-label{width:78px;flex:0 0 78px;font-size:13px;color:#4b5563;text-align:right;}
+  .rep-bar-track{flex:1;height:12px;background:#eef1f6;border-radius:999px;overflow:hidden;}
+  .rep-bar-fill{height:100%;border-radius:999px;}
+  .rep-bar-val{width:54px;flex:0 0 54px;font-size:13px;font-weight:700;text-align:left;}
+  .rep-list{margin:8px 0;padding-left:0;list-style:none;}
+  .rep-list li{position:relative;padding:7px 0 7px 22px;font-size:14px;line-height:1.75;color:#374151;border-bottom:1px dashed var(--line);}
+  .rep-list li:last-child{border-bottom:none;}
+  .rep-list li::before{content:'·';position:absolute;left:6px;top:6px;color:var(--blue);font-weight:700;font-size:16px;}
+  .rep-list li b{color:#111827;}
+  ol.rep-list li::before{content:'';}
+  .rep-callout{background:#f6f9ff;border:1px solid #d6e4fc;border-left:3px solid var(--blue);border-radius:8px;padding:10px 13px;font-size:13.5px;line-height:1.7;color:#374151;margin:10px 0;}
+  .rep-risk{background:var(--red-bg);border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:13.5px;line-height:1.7;color:#7f1d1d;margin:6px 0;} .rep-risk b{color:#b91c1c;}
+  .rep-tip{background:var(--green-bg);border:1px solid #bbf7d0;border-radius:8px;padding:10px 13px;font-size:14px;line-height:1.7;color:#166534;margin:10px 0;}
+  .rep-table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0 4px;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .rep-table th,.rep-table td{border:1px solid #e6eaf2;padding:8px 10px;text-align:left;line-height:1.5;}
+  .rep-table th{background:#f4f6fb;color:#374151;font-weight:600;}
+  .rep-table tbody tr:nth-child(even){background:#fafbfe;}
+  .rep-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .rep-table .hl{color:var(--blue-dark);font-weight:600;}
+  .area-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;background:#fcfdff;}
+  .area-card .a-name{font-size:14px;font-weight:700;color:#111827;margin:0 0 4px;}
+  .area-card .a-coord{font-size:12px;color:#9aa3b2;margin:0 0 6px;}
+  .area-card .a-verdict{font-size:13px;color:#374151;line-height:1.7;margin:0;}
+  .area-card .a-shops{font-size:12.5px;color:#6b7280;margin:6px 0 0;}
+  .poi-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:10px 0 0;font-size:12px;color:var(--muted);}
+  .poi-legend span{display:inline-flex;align-items:center;gap:5px;} .poi-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .poi-caption{font-size:11.5px;color:#9aa3b2;margin:8px 0 0;line-height:1.6;}
+  .report-acts{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+  .btn{min-height:44px;padding:0 18px;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;color:#fff;background:var(--blue);cursor:pointer;white-space:nowrap;transition:background .15s;}
+  .btn:hover{background:var(--blue-dark);} .btn.ghost{background:#f1f3f8;color:var(--muted);font-weight:500;}
+  .regen{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.7;color:#7c2d12;max-width:800px;margin:0 auto;}
+  .regen b{color:#b45309;}
+  .rep-appendix{font-size:13px;color:#4b5563;line-height:1.8;} .rep-appendix h3{font-size:14px;color:#111827;margin:14px 0 6px;}
+
+  /* ---------- PRINT_STYLE ---------- */
+  @media print{
+    .no-print{display:none !important;}
+    body{background:#fff;}
+    .wrap{max-width:none;padding:0 !important;}
+    #result{max-width:none;padding:0 !important;display:block !important;}
+    .report-doc{max-width:none;width:100%;border:none !important;box-shadow:none !important;padding:0 !important;margin:0 !important;}
+    .rep-cover-disclaimer,.rep-meta{box-shadow:none;}
+    .rep-meta{background:#fff !important;border:1px solid #ccc !important;}
+    .poi-map{height:300px !important;box-shadow:none !important;border:1px solid #ccc !important;}
+    .tile-notice{display:none !important;}
+    .report-acts{display:none !important;}
+    .btn.print{display:none !important;}
+    .rep-cover{border-bottom:2px solid #000 !important;}
+    h2.rep-sec{border-left:4px solid #000 !important;}
+    a{color:#000 !important;}
+  }
+  @media (max-width:520px){ .report-doc{padding:18px 14px 24px;} .rep-title{font-size:17px;} .rep-bar-label{width:64px;flex-basis:64px;font-size:12px;} }
+  @media (max-width:680px){
+    #finPanel{top:auto;bottom:0;left:0;height:88vh;width:100%;max-width:100%;transform:translateY(100%);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(16,24,40,.18);}
+    #finPanel.on{transform:translateY(0);}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 选择区（省→市→区县→业态 下钻） ============ -->
+<div class="wrap">
+  <header>
+    <h1 class="top"><span class="logo">缺</span>缺啥生意</h1>
+    <p class="sub">按省进入 · 候选点位地图 + 财务测算（演示版）</p>
+  </header>
+
+  <div class="card no-print">
+    <h2><span class="bar"></span>选择省份 / 城市 / 区县 / 业态</h2>
+    <div class="field"><label for="province">省份</label>
+      <select id="province"><option value="">请选择省份</option><option value="北京">北京（直辖市）</option><option value="山西">山西</option><option value="江苏">江苏</option></select></div>
+    <div class="field"><label for="city">城市 / 城区</label>
+      <select id="city"><option value="">请先选择省份</option></select></div>
+    <div class="field"><label for="district">区县 / 商圈（可选）</label>
+      <select id="district"><option value="">不限定（默认首选项）</option></select></div>
+    <div class="field"><label for="biz">关注业态</label>
+      <select id="biz">
+        <option value="餐饮零售">餐饮零售（深度测算）</option>
+        <option value="教培托管">教培托管（深度测算）</option>
+        <option value="生活服务">生活服务·美业/健身/护理（深度测算）</option>
+        <option value="社区便民">社区便民/托管混合（深度测算）</option>
+        <option value="便利店/茶饮快餐">便利店/茶饮快餐（深度测算）</option>
+        <option value="其他">其他长尾业态（通用测算）</option>
+      </select></div>
+    <p class="hint">省份和城市用于筛选范围，实际分析细化到街道/商圈级别。演示版预设代表性街道，正式版将接入高德数据覆盖全部街道/路段/门牌。</p>
+    <button class="go" id="go">查看候选点位</button>
+    <p class="err" id="errCity">请先选择省份与城市。</p>
+  </div>
+
+  <div class="loading" id="loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span> 正在生成候选点位……</div>
+
+  <!-- ============ 地图舞台 ============ -->
+  <div id="mapStage">
+    <div class="map-head"><span>当前：<b id="msScope">—</b></span><button id="backSel">重新选择</button></div>
+    <div id="poiMap" class="poi-map">
+      <div class="map-note">演示 · 非实时 · 示意点位 · 正式版接入高德后将细化到路段/门牌级</div>
+    </div>
+    <div class="spot-card" id="spotCard"></div>
+  </div>
+</div>
+
+<!-- ============ 报告区（REPORT_TEMPLATE 渲染目标，id=report 锚点） ============ -->
+<div id="result"></div>
+
+<!-- ============ 财务测算面板（侧滑） ============ -->
+<div id="finPanel">
+  <div class="fin-top"><b id="finTitle">财务测算</b><button class="x" id="finClose">×</button></div>
+  <div class="fin-body" id="finBody"></div>
+</div>
+
+<!-- ============ 底部引导（无留资、无弹窗） ============ -->
+<div class="foot-bottom no-print">
+  <b>正式版小程序即将上线 · 真实数据（高德POI）· 按次1元起 · 7天卡9.9元</b>
+  <span class="fb-sub">演示版免费开放：省份/城市/区县选择 · 地图圆圈+基础评分 · 每点位信息卡</span>
+</div>
+
+<!-- Leaflet 主库（开源，走 CDN；底图 OpenStreetMap，不需要任何 API Key） -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* =========================================================
+   GAODE_MIGRATION_NOTES：高德接入预留说明（第 12 章，8 条）
+   正式版接入高德开放平台后：
+   1. 行政区划API：DISTRICT_STREET_MAP 替换为高德行政区划API返回的真实街道边界
+   2. 地理编码坐标：圆圈坐标替换为高德地理编码/逆地理编码返回的真实经纬度
+   3. 竞品品类分布：高德搜索POI 按 CATEGORY_TAGS 品类标签分组，输出周边N米同类/替代业态精确数量
+   4. 租金区间：高德周边商铺挂牌/转铺信息 + 物业自主发布（PROPERTY_PORTAL_RESERVE）交叉校验
+   5. 交通/地铁距离：高德路线规划API 计算候选点位到最近地铁口步行距离，纳入可达性评分
+   6. 客流/时段数据：高德商业数据或自有采集 + 多源融合，输出分时客流曲线
+   7. 报告来源标注升级：各章节数据来源标注为"高德POI + 工商 + 平台数据"
+   8. 最终输出仍为辅助判断，不保证经营结果
+   ========================================================= */
+
+/* =========================================================
+   PROPERTY_PORTAL_RESERVE：物业入驻 / 商铺租售接口预留（注释区·不实现）
+   V2 阶段才实现：
+   - 物业/房东端：注册并发布商铺租售（面积 / 租金 / 图片 / 位置 / 联系方式）
+   - 看报告时同步展示该街道可租商铺列表（高德POI筛"商铺出租/转铺" + 物业自主发布）
+   - 收费模式：物业发布免费 或 9.9 元/月；想开店用户查看详情 1 元/条
+   - 预留数据字段：商铺ID / 面积 / 租金 / 楼层 / 临街性 / 图片URL / 发布者类型 / 更新时间
+   - 网页版（演示）不实现，仅预留结构与注释，便于小程序正式版对接
+   ========================================================= */
+
+/* =========================================================
+   PAYMENT_MIGRATION_NOTES：支付 / 收费 / 小程序接入预留（注释区·不实现）
+   正式版小程序（高德小程序 SDK 承载）才实现：
+   - 高德小程序 SDK：地图与 POI 检索走小程序端 SDK，无需网页 Key，合规且免跨域
+   - 微信支付商户号（mchid + APIv3）：报告/对比/物业详情按下述计费实时扣费
+   - 收费模式（用户侧）：按次 1 元起 / 深度报告 9.9 元 / 7 天卡 9.9 元 / 月卡 39 元；与 PROPERTY_PORTAL_RESERVE 的物业端收费（发布免费或 9.9 元/月）独立
+   - 预留字段：订单号 / 用户 openid / 报告深度等级 / 计费档位 / 支付状态 / 有效期
+   - 网页演示版不接支付、不接登录、不落库，仅保留上述注释结构
+   ========================================================= */
+
+/* =========================================================
+   PROVINCE_CITY_MAP：按省份进入（前期 3 省）
+   ========================================================= */
+const PROVINCE_CITY_MAP = {
+  '北京': { cities:['朝阳','海淀','通州','丰台'] },
+  '山西': { cities:['太原','大同','临汾','运城'] },
+  '江苏': { cities:['南京','苏州','无锡','常州','徐州'] }
+};
+
+/* =========================================================
+   CITY_CENTER_MAP：城市 → 行政中心坐标 [lng,lat]
+   ========================================================= */
+const CITY_CENTER_MAP = {
+  '北京':[116.4074, 39.9042], '太原':[112.5488, 37.8706], '大同':[113.3007, 40.0768],
+  '临汾':[111.5189, 36.0844], '运城':[110.9938, 34.9957],
+  '南京':[118.7969, 32.0603], '苏州':[120.5853, 31.2989], '无锡':[120.2991, 31.5689],
+  '常州':[119.9737, 31.8106], '徐州':[117.1842, 34.2611]
+};
+/* 城市 → 可选区县；北京各城区本身即第二级 */
+const CITY_DISTRICT_MAP = {
+  '太原':['小店区','迎泽区','杏花岭区','万柏林区'], '大同':['平城区','云冈区','云州区'],
+  '临汾':['尧都区','侯马市','洪洞县'], '运城':['盐湖区','永济市','河津市'],
+  '南京':['鼓楼区','玄武区','建邺区','江宁区'], '苏州':['姑苏区','工业园区','吴中区','相城区','吴江区'],
+  '无锡':['梁溪区','滨湖区','新吴区','锡山区'], '常州':['天宁区','钟楼区','新北区','武进区'],
+  '徐州':['云龙区','鼓楼区','泉山区','铜山区']
+};
+/* 已知区县相对"所属城市中心"偏移 */
+const DISTRICT_OFFSETS = {
+  '朝阳':[0.080, 0.017], '海淀':[-0.109, 0.055], '通州':[0.250, -0.125], '丰台':[-0.040, -0.030],
+  '小店区':[0.027, -0.030], '迎泽区':[0.010, 0.005], '杏花岭区':[-0.005, 0.025], '万柏林区':[-0.030, -0.010],
+  '平城区':[0.006, 0.004], '云冈区':[-0.030, 0.010], '云州区':[0.060, 0.020],
+  '尧都区':[0.004, 0.006], '侯马市':[0.100, 0.050], '洪洞县':[0.040, 0.020],
+  '盐湖区':[0.003, 0.004], '永济市':[0.080, 0.040], '河津市':[0.090, 0.030],
+  '鼓楼区':[0.005, 0.003], '玄武区':[0.006, 0.004], '建邺区':[0.020, -0.005], '江宁区':[0.080, 0.030],
+  '姑苏区':[0.004, 0.006], '工业园区':[0.050, 0.005], '吴中区':[0.050, -0.020], '相城区':[0.060, 0.010],
+  '梁溪区':[0.004, 0.006], '滨湖区':[0.030, 0.010], '新吴区':[0.040, -0.020], '锡山区':[0.070, 0.010],
+  '天宁区':[0.004, 0.006], '钟楼区':[-0.010, 0.004], '新北区':[0.040, 0.010], '武进区':[0.050, 0.030],
+  '云龙区':[0.006, 0.004], '泉山区':[-0.010, 0.000], '铜山区':[0.060, -0.010]
+};
+
+/* =========================================================
+   CITIES：城市档案
+   ========================================================= */
+const CITIES = {
+  '北京':{ name:'北京', density:1.90, bias:-8, rentLevel:5, rent:'核心商圈 1.5 万+/月，社区底商 8 千~1.2 万（示例）', flavor:'超高密度供给、同质化明显，细分与社区碎片场景才有空间', roads:['长安街','东单北大街','王府井大街','建国路','朝阳北路','中关村大街','海淀黄庄','通州北苑'] },
+  '太原':{ name:'太原', density:1.15, bias:5, rentLevel:3, rent:'主城 5 千~9 千/月，小店/迎泽更贵（示例）', flavor:'省会单核明显，社区与高校周边有稳定复购', roads:['迎泽大街','长风街','新建路','解放路','平阳路','亲贤街','南中环','晋阳街'] },
+  '大同':{ name:'大同', density:0.95, bias:7, rentLevel:2, rent:'古城周边 3~5 千/月，性价比高（示例）', flavor:'旅游与老城消费为主，季节性明显', roads:['清远街','魏都大道','迎宾街','操场城街','御河西路','恒安街'] },
+  '临汾':{ name:'临汾', density:0.90, bias:8, rentLevel:2, rent:'主城 3~5 千/月，较低（示例）', flavor:'本地生活节奏慢，家庭社区场景为主', roads:['鼓楼南大街','向阳路','解放路','尧都大道','平阳北街'] },
+  '运城':{ name:'运城', density:0.85, bias:8, rentLevel:2, rent:'2~4 千/月，成本低（示例）', flavor:'消费务实、价格敏感，低价高频品类易起量', roads:['河东街','红旗东街','人民北路','解放路','学苑路'] },
+  '南京':{ name:'南京', density:1.30, bias:3, rentLevel:4, rent:'主城 8 千~1.2 万/月，新城 6 千~9 千（示例）', flavor:'高校与政务人群并存，复购型生意较稳', roads:['玄武大道','中山路','长江路','珠江路','洪武北路','太平北路','北京东路','龙蟠中路'] },
+  '苏州':{ name:'苏州', density:1.25, bias:5, rentLevel:3, rent:'姑苏/园区 7 千~1.1 万/月，吴江更低（示例）', flavor:'产业人口占比高，夜间与工位人流可能存在机会', roads:['干将西路','十全街','凤凰街','临顿路','人民路','三香路','金鸡湖大道','松陵大道'] },
+  '无锡':{ name:'无锡', density:1.10, bias:6, rentLevel:3, rent:'梁溪主城 6 千~9 千/月，新吴更低（示例）', flavor:'本地生活节奏慢，社区复购是长期盘子', roads:['中山路','人民中路','健康路','解放东路','复兴路','学前街','清扬路','太湖大道'] },
+  '常州':{ name:'常州', density:1.00, bias:7, rentLevel:2, rent:'天宁/钟楼 5 千~8 千/月，周边更低（示例）', flavor:'居民消费务实，家庭与社区场景为主', roads:['延陵中路','和平北路','晋陵中路','文化路','局前街','劳动西路','怀德中路','通江大道'] },
+  '徐州':{ name:'徐州', density:1.05, bias:8, rentLevel:2, rent:'云龙/鼓楼 4 千~7 千/月，性价比高（示例）', flavor:'淮海经济区中心，辐射周边，价格敏感但体量大', roads:['淮海东路','中山南路','建国东路','解放路','彭城路','和平路','复兴南路','矿山东路'] }
+};
+
+/* =========================================================
+   业态技术口径 + 产品→技术映射 + 分层 T1/T2/T3
+   ========================================================= */
+const FMT = {
+  '餐饮':{ label:'餐饮门店', base:120, splits:['奶茶/果茶店','快餐店','正餐·川湘菜','烘焙甜品店','火锅店','日料/西餐'] },
+  '零售':{ label:'零售门店', base:260, splits:['便利店','生鲜店','服饰店','数码/维修','美妆集合店','家居杂货'] },
+  '服务':{ label:'生活服务门店', base:90, splits:['洗衣/干洗','理发/美容','家政维修','摄影写真','足疗按摩','开锁搬家'] },
+  '宠物':{ label:'宠物门店', base:22, splits:['宠物医院/诊所','宠物美容','宠物寄养','宠物食品用品','宠物训练','宠物殡葬'] },
+  '教育':{ label:'教育培训门店', base:60, splits:['学科培训机构','托管/托育','艺术·乐器培训','体能/运动馆','自习室'] },
+  '医疗':{ label:'医疗健康门店', base:45, splits:['口腔诊所','中医/推拿','全科诊所','眼科视光','体检/康复'] },
+  '其他':{ label:'其他长尾业态', base:40, splits:['社区便民店','五金/建材','鲜花绿植','图文快印','废品回收','家政维修'] },
+  '茶饮便利':{ label:'便利店/茶饮快餐门店', base:120, splits:['茶饮/果茶','便利店','快餐/小吃','咖啡/烘焙','早餐/轻食'] },
+  '便民':{ label:'社区便民/托管混合门店', base:90, splits:['社区托管','便民零售','老年友好服务','社区活动','轻维修'] }
+};
+/* =========================================================
+   BIZ_MODELS：业态选择器 → 财务模型分组 + fmtKey 映射（第 13 轮）
+   6 个关注业态，按 model 切换测算逻辑与报告表达：
+   trade(餐饮零售/便利店茶饮快餐) / edu(教培托管) / service(生活服务) / community(社区便民) / generic(其他)
+   所有业态均走完整深度报告（不再有 T3 简版），其他=通用经营测算模板
+   ========================================================= */
+const BIZ_MODELS = {
+  '餐饮零售':{ group:'trade', fmt:'餐饮', label:'餐饮/零售' },
+  '便利店/茶饮快餐':{ group:'trade', fmt:'茶饮便利', label:'便利店/茶饮快餐' },
+  '教培托管':{ group:'edu', fmt:'教育', label:'教培托管' },
+  '生活服务':{ group:'service', fmt:'服务', label:'生活服务(美业/健身/护理)' },
+  '社区便民':{ group:'community', fmt:'便民', label:'社区便民/托管混合' },
+  '其他':{ group:'generic', fmt:'其他', label:'其他/通用' }
+};
+const PRODUCT_TO_FMT = {}; Object.keys(BIZ_MODELS).forEach(function(k){ PRODUCT_TO_FMT[k]=BIZ_MODELS[k].fmt; });
+const INDUSTRY_TIERS = {}; Object.keys(BIZ_MODELS).forEach(function(k){ INDUSTRY_TIERS[k]={tier:'T1', fmt:BIZ_MODELS[k].fmt}; });
+/* 业态 → CATEGORY_TAGS 细分品类键（用于 ch3 展示该业态细分品类标签） */
+function CATS_KEY_OF(biz){ const m={'餐饮零售':'餐饮','便利店/茶饮快餐':'餐饮','教培托管':'教培','生活服务':'生活服务','社区便民':'生活服务','其他':null}; return m[biz]||null; }
+/* =========================================================
+   DEMO_POI_DATA：示例竞品 POI 模板（按业态），用于演示竞争结构
+   正式版替换为高德「周边 N 米同类/替代业态」POI 检索结果
+   ========================================================= */
+const POI_TEMPLATES = {
+  '餐饮':[['老李快餐','快餐'],['川小馆','快餐'],['重庆鸡公煲','快餐'],['巷口麻辣烫','快餐'],['黄焖鸡米饭','快餐'],['沙县小吃','快餐'],['兰州拉面','正餐'],['张记面馆','正餐'],['重庆小面','快餐'],['小郡肝串串','火锅'],['蜀大侠火锅','火锅'],['老北京涮肉','火锅'],['湘里乡亲','正餐'],['川湘私房菜','正餐'],['家常小炒','正餐'],['一人食小馆','正餐']],
+  '零售':[['全家便利','便利店'],['罗森便利','便利店'],['每一天便利店','便利店'],['社区生鲜','生鲜店'],['钱大妈','生鲜店'],['永辉超市','超市卖场'],['优衣库','服饰零售'],['名创优品','日用零售'],['屈臣氏','美妆零售'],['苏宁易购','数码维修'],['小米之家','数码维修'],['日用百货','家居杂货']],
+  '服务':[['洁丰干洗','洗衣干洗'],['福奈特洗衣','洗衣干洗'],['永琪美发','理发美容'],['丝域养发','理发美容'],['链家房产','房产中介'],['家家安家政','家政维修'],['顺丰速运','快递物流'],['中通快递','快递物流'],['美甲美睫','美容美甲'],['泰式按摩','足疗按摩'],['摄影工作室','摄影写真'],['开锁换锁','家政维修']],
+  '宠物':[['宠爱国际动物医院','宠物医院'],['派格宠物医院','宠物医院'],['萌宠诊所','宠物医院'],['宠物之家寄养','宠物寄养'],['猫狗公寓','宠物寄养'],['爱宠美容','宠物美容'],['爪爪宠物沙龙','宠物美容'],['皇家宠物食品','宠物食品'],['宠物壹号','宠物食品'],['汪星训练营','宠物训练'],['宠物殡葬服务','宠物殡葬'],['猫咖','宠物主题']],
+  '教育':[['新东方学习中心','学科培训'],['学而思培优','学科培训'],['巨人教育','学科培训'],['书法培训','艺术培训'],['舞蹈培训','艺术培训'],['美术培训','艺术培训'],['音乐培训','艺术培训'],['阳光托管班','托管托育'],['小星星托育','托管托育'],['安心晚托','托管托育'],['静心自习室','自习室'],['小小运动馆','体能运动']],
+  '医疗':[['拜博口腔','口腔诊所'],['瑞尔齿科','口腔诊所'],['美奥口腔','口腔诊所'],['康元中医馆','中医推拿'],['艾灸推拿馆','中医推拿'],['社区卫生服务中心','全科诊所'],['康宁全科诊所','全科诊所'],['亮视视光中心','眼科视光'],['美年体检中心','体检康复'],['儿童保健门诊','医疗其他'],['连锁药房','药店'],['国大药房','药店']],
+  '其他':[['社区便民店','社区便民'],['好邻居五金','五金建材'],['花点时间','鲜花绿植'],['快印图文','图文快印'],['废品回收站','废品回收'],['家家安家政','家政维修'],['便民裁缝','社区便民'],['修鞋配钥匙','社区便民']]
+};
+
+/* =========================================================
+   CATEGORY_TAGS：品类分层标签体系（核心差异化引擎的基础）
+   六大业态 × 细分品类；正式版按此标签调用高德POI分组检索
+   ========================================================= */
+const CATEGORY_TAGS = {
+  '餐饮':['川菜','粤菜','快餐','小吃','火锅','烧烤','自助','西餐','茶饮','烘焙'],
+  '教培':['数学','英语','语文','艺术','体育','早教','托管','编程','书法','棋类'],
+  '零售':['服装','鞋包','化妆品','便利店','生鲜','数码','书店','家居','母婴','珠宝'],
+  '生活服务':['洗衣','理发','家政','维修','房产中介','快递','美甲','摄影','健身','开锁'],
+  '健康理疗':['按摩','推拿','艾灸','采耳','瑜伽','体检','口腔','眼科','中医','康复'],
+  '宠物':['宠物店','宠物医院','宠物美容','宠物寄养','宠物食品','猫咖','宠物训练','宠物殡葬','异宠','宠物摄影']
+};
+/* 品类分布键 → 展示标签（与 INDUSTRY_TIERS / biz 名称对齐） */
+const CATS_KEY_LABEL = { '餐饮':'餐饮','教培':'教培托管','零售':'零售','生活服务':'生活服务','健康理疗':'健康理疗','宠物':'宠物' };
+
+/* =========================================================
+   COMPETITION_ENGINE：竞争判断逻辑（集中度 / 空白 / 互补）
+   核心原则：竞争压力不是"多=差"，而是"同质化=差"
+   输入：industry(所选业态) + cats(500m 内按品类键的门店数)
+   输出：peerTotal/同业主数/品类集中度%/直接竞品/互补业态/空白品类/label/advice
+   并在 advice 中按业态差异建模：
+     餐饮：扎堆聚人气但同质化内卷，看价格带重叠度与翻台差异
+     教培：不怕扎堆怕没同行，无同行=需求未验证
+     零售：品类差异化 + 租金承受力
+     生活服务：便利性驱动，500m 竞品少=机会
+     健康理疗：重信任复购，借互补业态稳定客源
+     宠物：客单高复购强，有社区即有机会
+   ========================================================= */
+function COMPETITION_ENGINE(industry, cats){
+  const KEYMAP = { '餐饮零售':'餐饮','便利店/茶饮快餐':'餐饮','生活服务':'生活服务','社区便民':'生活服务','教培托管':'教培','其他':'其他' };
+  const tKey = KEYMAP[industry] || '其他';
+  const order = ['餐饮','教培','零售','生活服务','健康理疗','宠物'];
+  const counts = order.map(function(k){ return { key:k, label:CATS_KEY_LABEL[k]||k, count:(cats[k]||0) }; });
+  const peerTotal = counts.reduce(function(a,c){ return a+c.count; }, 0);
+  const targetPeers = cats[tKey] || 0;
+  const concentration = peerTotal>0 ? Math.round(targetPeers/peerTotal*100) : 0;
+  const blankCats = counts.filter(function(c){ return c.count===0; }).map(function(c){ return c.label; });
+  const complement = peerTotal - targetPeers;
+  let concLabel, label, advice;
+  if(targetPeers===0){
+    concLabel='低'; label='该品类空白，可能是进入机会（但需验证需求）';
+    advice='周边 500m 无同业态门店，空白意味着先发优势，但也可能需求未被验证。建议先用轻资产/快闪试水，配合实地问卷确认真实客流与消费习惯。';
+  } else if(concentration>60){
+    concLabel='高'; label='同质化严重，建议差异化切入';
+    advice='同业态占周边门店 60% 以上，红海竞争、价格战概率大。须用差异化品类 + 错位时段 + 私域锁客切入，避免正面价格内卷。';
+  } else if(concentration>=30){
+    concLabel='中'; label='品类分散，可借聚人气红利';
+    advice='业态分布较均衡，周边人流已被多种业态培育。可借人气红利进入，选互补空档品类，与现有业态形成协同而非直接竞争。';
+  } else {
+    concLabel='低'; label='品类空白，需验证需求';
+    advice='同业态占比低（<30%），需求尚未被充分满足或验证。建议小步试错 + 实地访谈，确认消费习惯后再加重投入。';
+  }
+  if(industry==='餐饮'){
+    if(targetPeers>0) advice += '（餐饮模型：扎堆可聚人气，但同质化易内卷——重点看价格带重叠度与翻台率差异，用招牌品/时段错位拉开。）';
+  } else if(industry==='教培托管'){
+    if(targetPeers===0){ label='无同行扎堆，但教培"怕没同行"——需求可能未被市场验证'; advice='教培不怕同行扎堆，反而有同行说明需求已被验证、家长认知成熟。当前无同行，须重点核验周边学校/小区密度与付费意愿，再决定是否进入。'; }
+    else { advice += '（教培模型：有同行=需求被验证，重点看直接竞品数、互补业态与周边学校/小区密度，用师资/成果差异化。）'; }
+  } else if(industry==='零售'){
+    advice += '（零售模型：关键在品类差异化 + 租金承受力，避免与连锁贴身价格战，做精选/体验型品类。）';
+  } else if(industry==='生活服务'){
+    if(targetPeers<=6){ advice = '周边 500m 同业态门店少（'+targetPeers+' 家），生活服务由便利性驱动，空白即机会。'+(blankCats.length?('空白品类：'+blankCats.join('、')+'。'):''); }
+    else { advice += '（生活服务模型：便利性驱动，500m 竞品少=机会，多则拼地段与会员复购。）'; }
+  } else if(industry==='健康理疗'){
+    advice += '（健康理疗模型：重信任与复购，周边互补业态（社区/产业）带来稳定客源，避免与连锁正面对撞。）';
+  } else if(industry==='宠物'){
+    advice += '（宠物模型：客单高、复购强，周边有社区/住宅即有机会，可叠加寄养/美容提高频次。）';
+  }
+  return { peerTotal:peerTotal, counts:counts, targetPeers:targetPeers, concentration:concentration,
+           concLabel:concLabel, blankCats:blankCats, complement:complement, label:label, advice:advice };
+}
+
+/* =========================================================
+   TAG_PRESETS：街道/商圈特征标签 → 评分修正 + 财务预设 + 面积/租金单价
+   面积(area 典型值,㎡) / rentUnit(联动单价,元/㎡/月) / rentRange(单价区间)
+   ========================================================= */
+const TAG_PRESETS = {
+  '核心商业':{ supply:-6, pressure:14, fit:-4, rentMul:1.35, ticketMul:1.25, trafficMul:1.3, costPct:36, platformPct:20, rentNote:'高', audience:'通勤+周末家庭+游客混合，时段集中', area:90, rentUnit:150, rentRange:[120,200] },
+  '居住社区':{ supply:6, pressure:-10, fit:6, rentMul:1.0, ticketMul:1.0, trafficMul:0.92, costPct:40, platformPct:12, rentNote:'中', audience:'周边常住家庭，复购高、稳定', area:80, rentUnit:90, rentRange:[70,120] },
+  '产业片区':{ supply:10, pressure:-14, fit:4, rentMul:0.7, ticketMul:0.82, trafficMul:0.86, costPct:42, platformPct:8, rentNote:'低', audience:'产业工人+家庭，午晚高峰集中', area:90, rentUnit:60, rentRange:[40,90] },
+  '旅游居住':{ supply:2, pressure:-2, fit:0, rentMul:1.1, ticketMul:1.15, trafficMul:1.0, costPct:38, platformPct:15, rentNote:'中', audience:'游客+周末居住，季节性明显', area:60, rentUnit:110, rentRange:[80,150] },
+  '传统镇区':{ supply:8, pressure:-12, fit:2, rentMul:0.7, ticketMul:0.85, trafficMul:0.8, costPct:45, platformPct:6, rentNote:'低', audience:'本地居民，价格敏感、熟客为主', area:60, rentUnit:45, rentRange:[30,60] }
+};
+
+/* =========================================================
+   WUJIANG_SPOTS：吴江区详细预设（重点演示）
+   含 典型面积(area) + 租金单价(rentUnit) + 单价区间(rentRange)
+   ========================================================= */
+const WUJIANG_SPOTS = [
+  { name:'松陵', tag:'核心商业', off:[0.012,0.010], area:90, rentUnit:160, rentRange:[120,200], desc:'核心商业，购物中心+沿街商铺，租金高客流大，适合餐饮/零售/生活服务',
+    cats:{'餐饮':34,'零售':20,'生活服务':13,'教培':5,'健康理疗':4,'宠物':6} },
+  { name:'江陵', tag:'产业片区', off:[-0.030,-0.020], area:75, rentUnit:70, rentRange:[50,95], desc:'产业片区+居住混合，工人与家庭消费，租金中低，适合餐饮/生活服务/教培',
+    cats:{'餐饮':24,'零售':9,'生活服务':11,'教培':6,'健康理疗':3,'宠物':2} },
+  { name:'同里', tag:'旅游居住', off:[0.060,-0.040], area:45, rentUnit:115, rentRange:[80,150], desc:'旅游+居住，季节性客流，适合特色餐饮/零售/生活服务',
+    cats:{'餐饮':24,'零售':17,'生活服务':6,'教培':1,'健康理疗':3,'宠物':5} },
+  { name:'盛泽', tag:'产业片区', off:[-0.050,-0.030], area:60, rentUnit:60, rentRange:[40,80], desc:'产业镇（纺织），工人+家庭消费，租金中低，适合餐饮/生活服务/社区便民',
+    cats:{'餐饮':26,'零售':7,'生活服务':10,'教培':2,'健康理疗':2,'宠物':1} },
+  { name:'汾湖', tag:'居住社区', off:[0.045,0.022], area:75, rentUnit:80, rentRange:[60,100], desc:'新兴居住+产业混合，年轻人口流入，租金中，适合餐饮/教培/生活服务/社区便民',
+    cats:{'餐饮':19,'零售':9,'生活服务':15,'教培':14,'健康理疗':6,'宠物':7} }
+];
+
+/* =========================================================
+   DISTRICT_STREET_MAP：区县 → 街道/商圈（坐标偏移 + 特征标签 + 面积 + 租金单价）
+   ========================================================= */
+const DISTRICT_STREET_MAP = {
+  '吴江区': WUJIANG_SPOTS,
+  '小店区':[
+    { name:'亲贤街商圈', tag:'核心商业', off:[0.008,0.005], area:90, rentUnit:150, rentRange:[120,200], desc:'成熟商圈，客流密集，竞争强' },
+    { name:'长风商务区', tag:'核心商业', off:[-0.004,0.008], area:80, rentUnit:140, rentRange:[110,180], desc:'商务办公聚集，午市强' },
+    { name:'南中环片区', tag:'居住社区', off:[0.010,-0.006], area:80, rentUnit:90, rentRange:[70,120], desc:'居住为主，复购稳' }
+  ],
+  '朝阳':[
+    { name:'望京', tag:'核心商业', off:[-0.015,0.030], area:100, rentUnit:180, rentRange:[150,220], desc:'国际社区+办公，客流大、租金高' },
+    { name:'国贸', tag:'核心商业', off:[0.010,-0.020], area:90, rentUnit:200, rentRange:[160,240], desc:'核心 CBD，通勤极强、竞争密' },
+    { name:'三里屯', tag:'核心商业', off:[-0.005,0.005], area:80, rentUnit:190, rentRange:[150,230], desc:'潮流消费+夜经济，客单价高' },
+    { name:'双井', tag:'居住社区', off:[-0.010,-0.015], area:85, rentUnit:130, rentRange:[100,170], desc:'居住社区，复购稳定' }
+  ]
+};
+
+/* =========================================================
+   CATS_BY_TAG：按特征标签的"默认品类分布"（500m 内门店数）
+   吴江区已显式写入各自独立 cats；其余区县/通用街道缺省时用此表补附
+   ========================================================= */
+const CATS_BY_TAG = {
+  '核心商业':{ '餐饮':32, '零售':18, '生活服务':12, '教培':6, '健康理疗':4, '宠物':5 },
+  '居住社区':{ '餐饮':20, '零售':10, '生活服务':14, '教培':12, '健康理疗':5, '宠物':6 },
+  '产业片区':{ '餐饮':24, '零售':8, '生活服务':9, '教培':3, '健康理疗':2, '宠物':2 },
+  '旅游居住':{ '餐饮':22, '零售':15, '生活服务':7, '教培':2, '健康理疗':3, '宠物':4 },
+  '传统镇区':{ '餐饮':14, '零售':6, '生活服务':11, '教培':3, '健康理疗':2, '宠物':1 }
+};
+/* 给 DISTRICT_STREET_MAP 中未显式写 cats 的预设街道补上品类分布（仅加载时一次） */
+Object.keys(DISTRICT_STREET_MAP).forEach(function(k){
+  DISTRICT_STREET_MAP[k].forEach(function(s){ if(!s.cats) s.cats = CATS_BY_TAG[s.tag] || CATS_BY_TAG['居住社区']; });
+});
+
+/* =========================================================
+   SCORING_MODEL：评分维度与权重（避免极端值，留对比空间）
+   ========================================================= */
+const SCORING_MODEL = {
+  weight:{ supply:0.40, pressure:0.30, fit:0.30 },
+  composite:function(s,p,f){ return Math.round(this.weight.supply*s + this.weight.pressure*(100-p) + this.weight.fit*f); },
+  verdict:function(c){ return c>=75?{key:'go',txt:'建议进入'}:c>=60?{key:'watch',txt:'谨慎进入'}:{key:'no',txt:'暂不推荐'}; }
+};
+
+/* =========================================================
+   FINANCIAL_MODEL：财务测算（每个点位独立参数，面积联动租金）
+   输入：面积/月租金(=面积×街道单价)/装修设备折旧/人工/原料占比/水电/平台抽成/客单价
+   ========================================================= */
+const FIN_BASE = {
+  ticket:{ 餐饮:28, 茶饮便利:25, 零售:45, 服务:60, 宠物:120, 教育:90, 医疗:150, 便民:40, 其他:35 },
+  traffic:{ 餐饮:45, 茶饮便利:70, 零售:30, 服务:25, 宠物:12, 教育:20, 医疗:18, 便民:35, 其他:22 },
+  staff:{ 餐饮:3, 茶饮便利:2, 零售:2, 服务:2, 宠物:2, 教育:3, 医疗:4, 便民:2, 其他:2 },
+  wage:{ 餐饮:6000, 茶饮便利:5000, 零售:5000, 服务:5000, 宠物:5500, 教育:7000, 医疗:8000, 便民:5000, 其他:5000 },
+  fitout:{ 餐饮:80000, 茶饮便利:40000, 零售:40000, 服务:30000, 宠物:50000, 教育:60000, 医疗:120000, 便民:35000, 其他:25000 },
+  equip:{ 餐饮:50000, 茶饮便利:20000, 零售:20000, 服务:15000, 宠物:30000, 教育:30000, 医疗:80000, 便民:18000, 其他:15000 },
+  rentByLevel:{ 1:5000, 2:8000, 3:12000, 4:18000, 5:25000 },
+  area:{ '核心商业':120, '居住社区':80, '产业片区':100, '旅游居住':90, '传统镇区':60 }
+};
+/* 各财务模型专属默认参数（仅演示预设，正式版来自真实数据） */
+const MODEL_DEFAULTS = {
+  trade:{ costPct:38, platformPct:18 },
+  edu:{ costPct:25, platformPct:8, fullRate:70, students:45, renewPct:60, freq:8 },
+  service:{ costPct:30, platformPct:12, memberPct:40, bookRate:60 },
+  community:{ costPct:35, platformPct:6 },
+  generic:{ costPct:40, platformPct:5 }
+};
+/* 财务测算面板「查看财务测算」打开时的标准示例预设（演示用，非真实数据）
+   面积80㎡ × 90元/㎡/月 = 7,200元/月；装修设备折旧3,750；人工3人×7,000；水电1,880；
+   平台/外卖抽成12%；原料/进货成本占比40%；客单价/课单价90。
+   打开面板即填入这些确定值，避免空白/未填感；拖动面积滑块按 90元/㎡/月 联动租金。 */
+const FIN_EXAMPLE = {
+  area:80, rentUnit:90, rent:7200, rentRange:[70,120],
+  fitoutMonthly:3750, staff:3, wage:7000, util:1880,
+  platformPct:12, costPct:40, ticket:90, traffic:45,
+  fitout:90000, equip:0
+};
+
+/* =========================================================
+   COMPARISON_HOOKS + PRICING_TIERS（为小程序预留，网页不收）
+   ========================================================= */
+const COMPARISON_HOOKS = ['同街道不同业态','同区县不同街道','跨省/跨城对比'];
+const PRICING_TIERS = [
+  { name:'单点位财务测算详情', price:'1 元', note:'网页演示版已开放，正式版接真实数据' },
+  { name:'单点位完整深度报告', price:'3 元', note:'T1/T2 完整报告' },
+  { name:'同街道多业态对比', price:'2 元', note:'不按省数量线性加价' },
+  { name:'同区县多街道对比', price:'3 元', note:'街道级横向对比' },
+  { name:'跨省/跨城对比', price:'5 元', note:'吴江 vs 太原小店 vs 北京朝阳' },
+  { name:'7 天简报无限查', price:'9.9 元', note:'会员·简报' },
+  { name:'30 天深度报告限次+简报无限', price:'29 元', note:'会员·深度' }
+];
+
+const DISCLAIMERS = {
+  cover:'本报告为演示版，所有数据均为示例（标注「示例」），非真实 POI / 工商 / 客流 / 租金数据，仅用于展示产品形态与分析方法。分析细化到街道/商圈级别，不对整个省/市做笼统结论。不构成任何经营或投资建议。',
+  foot:'缺啥生意 · 演示版 · 数据均为示例 · 分析细化到街道级 · 最终决策请结合实地调研。'
+};
+
+/* =========================================================
+   工具
+   ========================================================= */
+function hash(str){ let h=2166136261; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return Math.abs(h); }
+function rnd(seed){ const x=Math.sin(seed%1000)*10000; return x-Math.floor(x); }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function fmtMoney(n){ return (typeof n==='number' && isFinite(n)) ? Math.round(n).toLocaleString('zh-CN') : '待输入'; }
+/* 全局防 NaN/undefined/Infinity：非有限数统一回退（演示预设/待输入/不影响演示） */
+function num(x, fb){ return (typeof x==='number' && isFinite(x)) ? x : (fb===undefined?0:fb); }
+function pct(x){ return (typeof x==='number' && isFinite(x)) ? Math.round(x)+'%' : '待输入'; }
+function getCityData(city){ return CITIES[city] || CITIES['北京']; }
+function getBaseCenter(city, district){
+  let base = CITY_CENTER_MAP[city];
+  if(!base) base = CITY_CENTER_MAP['北京'];
+  const offKey = district || (CITY_CENTER_MAP[city] ? null : city);
+  const off = DISTRICT_OFFSETS[offKey] || [0,0];
+  return [ +(base[0]+off[0]).toFixed(6), +(base[1]+off[1]).toFixed(6) ];
+}
+
+/* 取某区县下的街道/商圈列表（示例，含面积/租金单价） */
+function getStreets(district, city){
+  const key = district || city;
+  if(DISTRICT_STREET_MAP[key]) return DISTRICT_STREET_MAP[key];
+  // 通用生成 3 个代表性街道（按标签取面积/单价）
+  const pick = [
+    { tag:'核心商业', off:[0.010,0.008], desc:'区域核心商业带，客流集中（示例）' },
+    { tag:'居住社区', off:[-0.008,0.010], desc:'周边常住社区，复购稳定（示例）' },
+    { tag:'产业片区', off:[0.012,-0.010], desc:'产业或学校辐射，时段集中（示例）' }
+  ];
+  return pick.map(function(p){ const tp=TAG_PRESETS[p.tag]; return { name:(district||city)+'核心商圈', tag:p.tag, off:p.off, area:tp.area, rentUnit:tp.rentUnit, rentRange:tp.rentRange, desc:p.desc }; });
+}
+
+/* 由街道/商圈生成单个点位数据（坐标 + 评分 + 财务预设，面积联动租金） */
+function buildSpot(province, city, district, bizProduct, street, idx){
+  const fmtKey = PRODUCT_TO_FMT[bizProduct] || '其他';
+  const cd = getCityData(city);
+  const base = getBaseCenter(city, district);
+  const seed = hash([province,city,district,fmtKey,street.name].join('|'));
+  const tp = TAG_PRESETS[street.tag] || TAG_PRESETS['居住社区'];
+
+  const supply = clamp(Math.round(55 + cd.bias*0.5 + tp.supply + (rnd(seed+11)-0.5)*10), 28, 90);
+  const pressure = clamp(Math.round(45 + cd.density*10 + tp.pressure + (rnd(seed+17)-0.5)*10), 28, 90);
+  const fit = clamp(Math.round(50 + (5-cd.rentLevel)*3 + tp.fit + (rnd(seed+23)-0.5)*10), 28, 90);
+  const composite = SCORING_MODEL.composite(supply, pressure, fit);
+  const verdict = SCORING_MODEL.verdict(composite);
+
+  // 面积联动租金
+  const area = street.area || tp.area || 80;
+  const rentUnit = street.rentUnit || tp.rentUnit || 100;
+  const rentRange = street.rentRange || tp.rentRange || [60,120];
+  const rent = Math.round(area * rentUnit);
+  const ticket = Math.round(FIN_BASE.ticket[fmtKey] * tp.ticketMul);
+  const traffic = Math.round(FIN_BASE.traffic[fmtKey] * tp.trafficMul);
+  const staff = FIN_BASE.staff[fmtKey], wage = FIN_BASE.wage[fmtKey];
+  const fitout = FIN_BASE.fitout[fmtKey], equip = FIN_BASE.equip[fmtKey];
+  const fitoutMonthly = Math.round((fitout + equip) / 24);
+  const util = Math.round(rent*0.15 + 800);
+  const model = (BIZ_MODELS[bizProduct] && BIZ_MODELS[bizProduct].group) || 'trade';
+  const md = MODEL_DEFAULTS[model] || MODEL_DEFAULTS.trade;
+  const finPreset = Object.assign(
+    { area:area, rentUnit:rentUnit, rentRange:rentRange, rent:rent, model:model,
+      fitoutMonthly:fitoutMonthly, staff:staff, wage:wage, costPct:tp.costPct, util:util,
+      platformPct:tp.platformPct, ticket:ticket, traffic:traffic, fitout:fitout, equip:equip }, md);
+
+  const coord = [ +(base[0]+street.off[0]).toFixed(6), +(base[1]+street.off[1]).toFixed(6) ];
+  // 竞争差异化引擎：品类分布 + 所选业态 → 集中度/空白/互补
+  const cats = street.cats || CATS_BY_TAG[street.tag] || CATS_BY_TAG['居住社区'];
+  const comp = COMPETITION_ENGINE(bizProduct, cats);
+  return { name:street.name, tag:street.tag, desc:street.desc, coord:coord, audience:tp.audience, rentNote:tp.rentNote,
+           area:area, rentUnit:rentUnit, rentRange:rentRange, rent:rent, cats:cats, comp:comp,
+           scores:{ supply:supply, pressure:pressure, fit:fit, composite:composite, verdict:verdict }, finPreset:finPreset };
+}
+
+/* 财务测算（输入预设 → 结果） */
+/* =========================================================
+   FINANCIAL_MODEL 计算：按业态模型分派（trade/edu/service/community/generic）
+   统一输出：labor/monthlyFixed/margin/breakEvenRev/initial/scenes/breakEvenTraffic/dayNeed
+   + extras（模型专属：保本学员数/满班率/会员占比/预约率/人效/分模块）
+   + breakEvenUnit{label,value}（按业态给出正确的"保本单位"）
+   全程 num() 防护，绝不出现 NaN/undefined/Infinity
+   ========================================================= */
+function computeFin(p){
+  const model = p.model || 'trade';
+  const labor = num(p.staff,0) * num(p.wage,0);
+  const monthlyFixed = num(p.rent,0) + labor + num(p.fitoutMonthly,0) + num(p.util,0);
+  const costPct = num(p.costPct,40), platPct = num(p.platformPct,0);
+  const margin = clamp(1 - costPct/100 - platPct/100*0.3, 0.05, 0.9);
+  const ticket = num(p.ticket,30);
+  const breakEvenRev = margin>0 ? Math.round(monthlyFixed/margin) : 0;
+  const initial = Math.round(num(p.rent,0)*2 + num(p.fitout,0) + num(p.equip,0));
+  const baseTraffic = num(p.traffic,20);
+  const scenes = [ {name:'保守',k:0.6},{name:'基准',k:1.0},{name:'乐观',k:1.4} ].map(function(s){
+    const tr = Math.round(baseTraffic * s.k);
+    const rev = Math.round(tr * 30 * ticket);
+    const profit = Math.round(rev * margin - monthlyFixed);
+    const payback = profit>0 ? (initial/profit).toFixed(1)+' 个月' : '模型不成立';
+    return { name:s.name, traffic:tr, rev:rev, profit:profit, payback:payback };
+  });
+  const baseScene = scenes[1];
+  const breakEvenTraffic = (ticket>0 && baseScene.traffic>0) ? Math.round(breakEvenRev/(ticket*30)) : 0;
+  const fin = { model:model, labor:labor, monthlyFixed:monthlyFixed, margin:margin, breakEvenRev:breakEvenRev,
+    initial:initial, ticket:ticket, costPct:costPct, platPct:platPct, scenes:scenes,
+    breakEvenTraffic:breakEvenTraffic, dailyNeed:breakEvenTraffic, extras:{},
+    staff:num(p.staff,0), wage:num(p.wage,0), fitoutMonthly:num(p.fitoutMonthly,0), util:num(p.util,0) };
+  if(model==='edu'){
+    const freq = num(p.freq,8), students = num(p.students,40), fullRate = num(p.fullRate,70), renewPct = num(p.renewPct,60);
+    const breakEvenStudents = (ticket*freq>0) ? Math.ceil(breakEvenRev/(ticket*freq)) : 0;
+    fin.extras = { students:students, fullRate:fullRate, renewPct:renewPct, freq:freq,
+      breakEvenStudents:breakEvenStudents, monthRev:Math.round(students*freq*ticket),
+      seatCap:Math.max(1, Math.round(students/Math.max(1,fullRate/100))) };
+    fin.breakEvenUnit = { label:'保本学员数', value:breakEvenStudents+' 人' };
+  } else if(model==='service'){
+    const memberPct = num(p.memberPct,40), bookRate = num(p.bookRate,60);
+    const wageTot = num(p.staff,1)*num(p.wage,5000);
+    fin.extras = { memberPct:memberPct, bookRate:bookRate,
+      manEff: wageTot>0 ? Math.round((baseTraffic*30*ticket*margin)/wageTot) : 0 };
+    fin.breakEvenUnit = { label:'保本客次/月', value:(baseTraffic*30)+' 次' };
+  } else if(model==='community'){
+    fin.extras = { modules:[ {name:'托管/便民',pct:40}, {name:'轻零售',pct:35}, {name:'活动/健康',pct:25} ] };
+    fin.breakEvenUnit = { label:'保本服务人次/月', value:(baseTraffic*30)+' 人次' };
+  } else if(model==='generic'){
+    fin.breakEvenUnit = { label:'保本单量/月', value:(baseTraffic*30)+' 单' };
+  } else {
+    fin.breakEvenUnit = { label:'保本单量/月', value:(baseTraffic*30)+' 单' };
+  }
+  return fin;
+}
+
+/* =========================================================
+   SENSITIVITY_ANALYSIS：租金±20% / 客单价±15% / 单量±30% + 死亡区间
+   + 模型专属轴（教培：在册/续费率；生活服务：预约率/会员占比；社区便民：服务人次）
+   全程 num() 防护
+   ========================================================= */
+function sensAnalysis(p){
+  const base = computeFin(p);
+  const baseScene = base.scenes[1];
+  const baseProfit = baseScene.profit;
+  const rentUp = computeFin(Object.assign({},p,{rent:Math.round(num(p.rent)*1.2)}));
+  const rentDown = computeFin(Object.assign({},p,{rent:Math.round(num(p.rent)*0.8)}));
+  const revUp = computeFin(Object.assign({},p,{ticket:Math.round(num(p.ticket)*1.15)}));
+  const revDown = computeFin(Object.assign({},p,{ticket:Math.round(num(p.ticket)*0.85)}));
+  const trUp = computeFin(Object.assign({},p,{traffic:Math.round(num(p.traffic)*1.3)}));
+  const trDown = computeFin(Object.assign({},p,{traffic:Math.round(num(p.traffic)*0.7)}));
+  const deathFin = computeFin(Object.assign({},p,{rent:Math.round(num(p.rent)*1.2), ticket:Math.round(num(p.ticket)*0.85)}));
+  const deathProfit = deathFin.scenes[1].profit;
+  const modelRows = [];
+  if(p.model==='edu'){
+    const fs = computeFin(Object.assign({},p,{students:Math.max(1,Math.round(num(p.students)*0.7))}));
+    modelRows.push({label:'在册学员 -30%', impact:'月净利', value:fmtMoney(fs.scenes[1].profit)+' 元'});
+    const rp = computeFin(Object.assign({},p,{renewPct:Math.max(0,Math.round(num(p.renewPct)*0.7))}));
+    modelRows.push({label:'续费率 -30%', impact:'月净利', value:fmtMoney(rp.scenes[1].profit)+' 元'});
+  } else if(p.model==='service'){
+    const br = computeFin(Object.assign({},p,{bookRate:Math.max(0,Math.round(num(p.bookRate)*0.7))}));
+    modelRows.push({label:'预约率 -30%', impact:'月净利', value:fmtMoney(br.scenes[1].profit)+' 元'});
+    const mp = computeFin(Object.assign({},p,{memberPct:Math.max(0,Math.round(num(p.memberPct)*0.7))}));
+    modelRows.push({label:'会员占比 -30%', impact:'月净利', value:fmtMoney(mp.scenes[1].profit)+' 元'});
+  } else if(p.model==='community'){
+    const mr = computeFin(Object.assign({},p,{traffic:Math.max(1,Math.round(num(p.traffic)*0.7))}));
+    modelRows.push({label:'服务人次 -30%', impact:'月净利', value:fmtMoney(mr.scenes[1].profit)+' 元'});
+  }
+  return { rentUpBE:rentUp.breakEvenRev, rentDownBE:rentDown.breakEvenRev,
+    profitUp:revUp.scenes[1].profit, profitDown:revDown.scenes[1].profit,
+    pbUp:trUp.scenes[1].payback, pbDown:trDown.scenes[1].payback,
+    baseProfit:baseProfit, deathProfit:deathProfit, death:deathProfit<=0, modelRows:modelRows };
+}
+
+/* =========================================================
+   MAP_CIRCLES：圆圈颜色/大小（大/红=竞争激烈；中/橙=中等；小/绿=相对空白）
+   ========================================================= */
+function spotColor(pressure){ return pressure>=70?'#ef4444':pressure>=55?'#f59e0b':'#22c55e'; }
+function spotRadius(pressure){ return pressure>=70?16:pressure>=55?12:9; }
+function levelText(v){ return v>=70?'高':v>=55?'中':'低'; }
+
+/* 租金全链路格式：约X元/月（Y㎡，Z元/㎡/月） */
+function formatRent(rent,area,unit){ return '约'+fmtMoney(rent)+'元/月（'+area+'㎡，'+unit+'元/㎡/月）'; }
+
+/* =========================================================
+   状态
+   ========================================================= */
+let STATE = { province:'', city:'', district:'', biz:'', spots:[] };
+let _map = null, _markers = [];
+let compareSpots = [];
+
+/* =========================================================
+   生成候选点位（"查看候选点位"）
+   ========================================================= */
+function showCandidates(){
+  const p=$prov.value, c=$city.value, dist=$dist.value, b=$biz.value;
+  if(!p || !c){ $err.classList.add('on'); if(!p)$prov.focus(); else $city.focus(); return; }
+  $err.classList.remove('on');
+  let d = dist;
+  if(!d){ const ds=CITY_DISTRICT_MAP[c]; if(ds&&ds.length) d=ds[0]; }
+  STATE = { province:p, city:c, district:d, biz:b, spots:[] };
+  const streets = getStreets(d, c);
+  STATE.spots = streets.map(function(st,i){ return buildSpot(p,c,d,b,st,i); });
+  document.getElementById('msScope').textContent = p+'·'+c+(d?'·'+d:'')+' · '+b;
+  document.getElementById('mapStage').classList.add('on');
+  document.getElementById('spotCard').classList.remove('on');
+  renderMap();
+  const ms=document.getElementById('mapStage'); if(ms && ms.scrollIntoView) ms.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderMap(){
+  const el=document.getElementById('poiMap');
+  if(!window.L){ el.innerHTML='<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px">示例模式：地图组件为演示占位（需联网加载地图库）。候选点位信息卡与财务测算仍可正常查看。</div>'; return; }
+  if(_map){ _map.remove(); _map=null; }
+  const pts=STATE.spots;
+  const latlngs=pts.map(function(s){ return [s.coord[1],s.coord[0]]; });
+  const center = latlngs.length ? latlngs.reduce(function(a,b){return [a[0]+b[0],a[1]+b[1]];},[0,0]).map(function(v){return v/latlngs.length;}) : [39.9,116.4];
+  _map=L.map('poiMap',{scrollWheelZoom:false}).setView(center, 12);
+  const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+  let te=0; tiles.on('tileerror',function(){ if(++te===6) showTileNotice(); }); tiles.addTo(_map);
+  _markers=[];
+  pts.forEach(function(s){
+    const m=L.circleMarker([s.coord[1],s.coord[0]],{ radius:spotRadius(s.scores.pressure), color:'#fff', weight:2, fillColor:spotColor(s.scores.pressure), fillOpacity:0.9 }).addTo(_map);
+    m.bindTooltip(s.name,{permanent:true,direction:'top',className:'spot-label',offset:[0,-6]});
+    m.on('click',function(){ selectSpot(s); });
+    _markers.push(m);
+  });
+  setTimeout(function(){ if(_map) _map.invalidateSize(); }, 150);
+}
+function showTileNotice(){
+  const el=document.getElementById('poiMap'); if(!el||el.querySelector('.tile-notice')) return;
+  const n=document.createElement('div'); n.className='tile-notice'; n.innerHTML='<b>示例模式</b><br>地图与 POI 为高德接入前示意，正式版将加载真实地图 / 周边业态点 / 租售数据，圆圈与信息卡不受影响。'; el.appendChild(n);
+}
+
+/* =========================================================
+   SPOT_DETAIL_CARD：点击圆圈 → 信息卡（租金带面积锚点 + 同业数量范围）
+   ========================================================= */
+function selectSpot(s){
+  const card=document.getElementById('spotCard');
+  const col=spotColor(s.scores.pressure);
+  const peerN = num(s.comp && s.comp.peerTotal, 0);
+  const rentStr = formatRent(s.rent, s.area, s.rentUnit) + '（单价区间 '+s.rentRange[0]+'-'+s.rentRange[1]+'元/㎡/月）';
+  card.innerHTML =
+    '<div class="sc-head">'+s.name+' <span class="sc-tag">'+s.tag+'</span></div>'+
+    '<div class="sc-judge">'+s.desc+'（示例判断，需实地核验）</div>'+
+    '<div class="sc-bar"><span class="lab">供需评分</span><div class="sc-track"><div class="sc-fill" style="width:'+s.scores.supply+'%;background:'+(s.scores.supply>=70?'var(--green)':s.scores.supply>=55?'var(--orange)':'var(--red)')+'"></div></div><span class="sc-val">'+s.scores.supply+'</span></div>'+
+    '<div class="sc-meta"><span>竞争强度：<b>'+levelText(s.scores.pressure)+'</b>（示例：周边 500m 同业约 '+peerN+' 家）</span></div>'+
+    '<div class="sc-meta"><span>品类集中度：<b>'+s.comp.concentration+'%</b>（'+s.comp.concLabel+'）｜直接竞品 <b>'+s.comp.targetPeers+'</b> 家｜互补业态 <b>'+s.comp.complement+'</b> 家</span></div>'+
+    '<div class="sc-meta"><span>竞争判断：<b>'+s.comp.label+'</b></span></div>'+
+    '<div class="sc-meta"><span>租金压力：<b>'+s.rentNote+'</b></span></div>'+
+    '<div class="sc-meta"><span style="color:#374151">租金示例：<b style="color:#111827">'+rentStr+'</b></span></div>'+
+    '<div class="sc-meta"><span>开店适配：<b>'+s.scores.fit+'</b></span><span>适合客群：<b>'+s.audience+'</b></span></div>'+
+    '<div class="sc-acts"><button class="btn-fin" id="scFin">查看财务测算</button><button class="btn-rep" id="scRep">生成完整报告</button></div>';
+  card.classList.add('on');
+  document.getElementById('scFin').addEventListener('click',function(){ openFin(s); });
+  document.getElementById('scRep').addEventListener('click',function(){ generateReport(s); });
+}
+
+/* =========================================================
+   FINANCIAL_MODEL 面板（面积联动租金 + 三档情景 + 敏感性分析）
+   ========================================================= */
+const FIN_INPUTS_TRADE = [
+  {key:'area',label:'面积（㎡）',min:30,max:300,step:5},
+  {key:'rent',label:'月租金（元/月）',min:1000,max:50000,step:500},
+  {key:'fitoutMonthly',label:'装修+设备折旧（月均摊，元）',min:500,max:10000,step:250},
+  {key:'staff',label:'人工（人）',min:0,max:10,step:1},
+  {key:'wage',label:'人均月薪（元）',min:3000,max:12000,step:500},
+  {key:'util',label:'水电杂费（元/月）',min:500,max:15000,step:250},
+  {key:'costPct',label:'原料/进货成本占比（%）',min:10,max:70,step:1},
+  {key:'platformPct',label:'平台抽成/外卖占比（%）',min:0,max:40,step:1},
+  {key:'ticket',label:'客单价（元）',min:10,max:400,step:1},
+  {key:'traffic',label:'目标日均单量',min:2,max:200,step:1}
+];
+/* 按业态模型返回可调参数（第 13 轮：分业态财务模板） */
+function finInputsFor(model){
+  const common = FIN_INPUTS_TRADE.slice(0,6); // 面积/月租/折旧/人工/人均薪/水电
+  if(model==='edu'){
+    return common.concat([
+      {key:'costPct',label:'物料/获客变动占比（%）',min:10,max:60,step:1},
+      {key:'platformPct',label:'获客摊销占比（%）',min:0,max:40,step:1},
+      {key:'ticket',label:'单次课/课时单价（元）',min:20,max:400,step:5},
+      {key:'traffic',label:'目标日均到访人次',min:2,max:200,step:1},
+      {key:'students',label:'在册学员数',min:5,max:300,step:5},
+      {key:'fullRate',label:'满班率（%）',min:20,max:100,step:1},
+      {key:'renewPct',label:'续费率（%）',min:20,max:100,step:1},
+      {key:'freq',label:'月频次（次/学员·月）',min:2,max:20,step:1}
+    ]);
+  }
+  if(model==='service'){
+    return common.concat([
+      {key:'costPct',label:'耗材/产品成本占比（%）',min:10,max:60,step:1},
+      {key:'platformPct',label:'团购/平台抽成（%）',min:0,max:40,step:1},
+      {key:'ticket',label:'客单价/卡项均价（元）',min:20,max:400,step:5},
+      {key:'traffic',label:'目标日均客次',min:2,max:200,step:1},
+      {key:'memberPct',label:'会员卡占比（%）',min:0,max:100,step:1},
+      {key:'bookRate',label:'预约率（%）',min:0,max:100,step:1}
+    ]);
+  }
+  if(model==='community'){
+    return common.concat([
+      {key:'costPct',label:'服务/进货成本占比（%）',min:10,max:70,step:1},
+      {key:'platformPct',label:'平台/到家抽成（%）',min:0,max:40,step:1},
+      {key:'ticket',label:'客单价/月费（元）',min:10,max:400,step:1},
+      {key:'traffic',label:'目标日均服务人次',min:2,max:200,step:1}
+    ]);
+  }
+  return FIN_INPUTS_TRADE; // trade / generic
+}
+let finState = null;
+function openFin(s){
+  const model = (s.finPreset && s.finPreset.model) || 'trade';
+  const md = MODEL_DEFAULTS[model] || MODEL_DEFAULTS.trade;
+  // 打开面板即填入标准示例预设（面积80㎡·月租7,200元@90元/㎡·折旧3,750·人工3人×7,000·水电1,880·抽成12%·原料40%·客单价90），避免空白未填感
+  finState = Object.assign({}, md, FIN_EXAMPLE, { model:model, rentUnit:90, rent:7200, area:80 });
+  const lbl = BIZ_MODELS[STATE.biz] ? BIZ_MODELS[STATE.biz].label : '';
+  document.getElementById('finTitle').textContent = s.name + ' · 财务测算（'+lbl+'）';
+  renderFinBody(s);
+  document.getElementById('finPanel').classList.add('on');
+}
+function renderFinBody(s){
+  const inputs = finInputsFor(finState.model).map(function(f){
+    const val = (finState[f.key]===undefined||finState[f.key]===null)?'':finState[f.key];
+    return '<div class="slider"><div class="sl-top"><span>'+f.label+'</span><b id="fv_'+f.key+'">'+val+'</b></div>'+
+      '<input type="range" id="fi_'+f.key+'" min="'+f.min+'" max="'+f.max+'" step="'+f.step+'" value="'+val+'"></div>';
+  }).join('');
+  const body=document.getElementById('finBody');
+  body.innerHTML =
+    '<div class="fin-note">示例预设：面积 80㎡ × 90 元/㎡/月 = 7,200 元/月（拖动面积滑块将按此单价自动联动）。以下为演示测算参数（非真实经营数据）；正式版将接入高德真实租金 / 客流。</div>'+
+    '<div class="fin-sec-t">可调参数（'+(BIZ_MODELS[STATE.biz]?BIZ_MODELS[STATE.biz].label:'')+'模型）</div>'+inputs+
+    '<div class="fin-sec-t">自动测算结果</div><div class="fin-res" id="finRes"></div>'+
+    '<div class="fin-sec-t">敏感性分析</div><div class="fin-res" id="finSens"></div>'+
+    '<div class="cmp-head"><b>对比（最多 3 个）</b><button id="finAdd">+ 加入对比</button></div>'+
+    '<div class="cmp-cards" id="cmpCards"></div>';
+  finInputsFor(finState.model).forEach(function(f){
+    const el=document.getElementById('fi_'+f.key); if(!el) return;
+    el.addEventListener('input',function(){
+      finState[f.key]=+el.value;
+      document.getElementById('fv_'+f.key).textContent=el.value;
+      // 面积联动租金：拖动面积 → 租金 = 面积 × 示例单价 90 元/㎡/月（手动覆盖租金则不再强制联动）
+      if(f.key==='area'){
+        const linked = Math.round(+el.value * finState.rentUnit);
+        finState.rent = linked;
+        const re=document.getElementById('fi_rent'); const rv=document.getElementById('fv_rent');
+        if(re){ re.value=linked; } if(rv){ rv.textContent=linked; }
+      }
+      paintFinRes();
+    });
+  });
+  document.getElementById('finAdd').addEventListener('click',function(){
+    if(compareSpots.length>=3){ toast('最多对比 3 个点位'); return; }
+    if(!compareSpots.some(function(x){return x.name===s.name;})) compareSpots.push(s);
+    renderCompare();
+  });
+  paintFinRes();
+  renderCompare();
+}
+function paintFinRes(){
+  const f=computeFin(finState);
+  const best=f.scenes.find(function(x){return x.name==='乐观';});
+  const worst=f.scenes.find(function(x){return x.name==='保守';});
+  const rows = [
+    row('月固定成本合计', fmtMoney(f.monthlyFixed)+' 元'),
+    row('毛利率/贡献毛利', pct(f.margin*100)),
+    row('月保本营业额', fmtMoney(f.breakEvenRev)+' 元','hl'),
+    row('日均需营业额', fmtMoney(num(f.breakEvenRev/30))+' 元'),
+    row(f.breakEvenUnit.label, f.breakEvenUnit.value,'hl'),
+    row(f.model==='edu'?'等效日服务量（课次）':f.model==='service'?'日均需客次':f.model==='community'?'日均需服务人次':'日均需单量', num(f.dailyNeed)+'（日当量）')
+  ];
+  if(f.model==='edu'){
+    rows.push(row('在册学员 / 满班率', num(f.extras.students)+' 人 / '+pct(f.extras.fullRate)));
+    rows.push(row('续费率 / 月频次', pct(f.extras.renewPct)+' / '+num(f.extras.freq)+' 次·月'));
+    rows.push(row('月营收示意（学员×月频×单价）', fmtMoney(f.extras.monthRev)+' 元'));
+    rows.push(row('保本学员数', num(f.extras.breakEvenStudents)+' 人'));
+  } else if(f.model==='service'){
+    rows.push(row('会员卡占比 / 预约率', pct(f.extras.memberPct)+' / '+pct(f.extras.bookRate)));
+    rows.push(row('人效（营收/人力，倍）', num(f.extras.manEff)));
+  } else if(f.model==='community'){
+    rows.push(row('分模块收入占比', f.extras.modules.map(function(m){return m.name+' '+m.pct+'%';}).join(' · ')));
+  }
+  document.getElementById('finRes').innerHTML = rows.join('')+
+    '<div class="scene-row">'+ sceneCard('保守',worst)+sceneCard('基准',f.scenes.find(function(x){return x.name==='基准';}))+sceneCard('乐观',best)+'</div>';
+  // 敏感性
+  const sa=sensAnalysis(finState);
+  const deathTxt = sa.death
+    ? '<div class="rep-risk" style="margin-top:8px"><b>死亡区间：</b>租金上涨20% 且 客单价下降15% 同时发生时，基准情景月利润转为 <b>'+fmtMoney(sa.deathProfit)+' 元</b>（亏损），即触发死亡区间——任意两项恶化即亏损，须以保守情景为底线。</div>'
+    : '<div class="rep-tip" style="margin-top:8px"><b>安全边际：</b>基准情景月利润约 '+fmtMoney(sa.baseProfit)+' 元；即使租金+20% 且客单价-15% 同时发生，仍维持盈利，模型韧性较强。</div>';
+  const sensRows = [
+    row('租金+20% → 保本额', fmtMoney(sa.rentUpBE)+' 元'),
+    row('租金-20% → 保本额', fmtMoney(sa.rentDownBE)+' 元'),
+    row('客单价+15% → 月净利', fmtMoney(sa.profitUp)+' 元'),
+    row('客单价-15% → 月净利', fmtMoney(sa.profitDown)+' 元'),
+    row('日均单+30% → 回本', sa.pbUp),
+    row('日均单-30% → 回本', sa.pbDown)
+  ];
+  (sa.modelRows||[]).forEach(function(mr){ sensRows.push(row(mr.label+' → '+mr.impact, mr.value)); });
+  document.getElementById('finSens').innerHTML = sensRows.join('') + deathTxt;
+  function row(k,v,cls){ return '<div class="r1"><span>'+k+'</span><b class="'+(cls||'')+'">'+v+'</b></div>'; }
+  function sceneCard(n,sc){ const ok=sc.profit>0; return '<div class="scene '+(ok?'ok':'bad')+'"><div class="sn">'+n+'</div><div class="sp">'+fmtMoney(sc.profit)+' 元</div><div class="sn">回本 '+sc.payback+'</div></div>'; }
+}
+function renderCompare(){
+  const box=document.getElementById('cmpCards'); if(!box) return;
+  box.innerHTML = compareSpots.map(function(s){
+    const f=computeFin(s.finPreset);
+    return '<div class="cmp-card"><div class="cn">'+s.name+'</div><div class="cv">租金 '+fmtMoney(s.rent)+'（'+s.area+'㎡/'+s.rentUnit+'）</div><div class="cv">保本 '+fmtMoney(f.breakEvenRev)+'</div><div class="cv">乐观净利 '+fmtMoney(f.scenes.find(function(x){return x.name==='乐观';}).profit)+'</div><div class="cv">综合 '+s.scores.composite+'</div></div>';
+  }).join('');
+}
+document.getElementById('finClose').addEventListener('click',function(){ document.getElementById('finPanel').classList.remove('on'); });
+
+/* =========================================================
+   REPORT_TEMPLATE / REPORT_SECTIONS：街道级深度报告（行研质感）
+   ========================================================= */
+function dimColor(name,v){ const bh=name!=='pressure'; return bh?(v>=70?'var(--green)':v>=55?'var(--orange)':'var(--red)'):(v>=70?'var(--red)':v>=55?'var(--orange)':'var(--green)'); }
+function scoreBars(d){ const s=d.scores; const rows=[{n:'供需机会',k:'supply',v:s.supply},{n:'竞争压力',k:'pressure',v:s.pressure},{n:'开店适配',k:'fit',v:s.fit}];
+  return '<div class="rep-bars">'+rows.map(function(r){const col=dimColor(r.k,r.v);return '<div class="rep-bar-row"><div class="rep-bar-label">'+r.n+'</div><div class="rep-bar-track"><div class="rep-bar-fill" style="width:'+r.v+'%;background:'+col+'"></div></div><div class="rep-bar-val" style="color:'+col+'">'+r.v+'</div></div>';}).join('')+'</div>'; }
+
+/* 评分拆解（执行摘要用）：供需/竞争/适配 各拆为 3-4 个子因子 */
+function subScores(d){
+  const seed = hash(d.province+d.city+d.street+d.biz);
+  const cd = getCityData(d.city);
+  const tp = TAG_PRESETS[d.tag]||TAG_PRESETS['居住社区'];
+  const demand = clamp(Math.round(50 + cd.bias*0.6 + tp.supply*0.5 + (rnd(seed+1)-0.5)*10),22,95);
+  const supplySide = clamp(Math.round(52 - tp.supply*0.5 + cd.density*7 + (rnd(seed+2)-0.5)*10),22,95);
+  const external = clamp(Math.round(46 + cd.bias*0.3 + (rnd(seed+3)-0.5)*10),22,95);
+  const peerDensity = clamp(Math.round(40 + cd.density*12 + tp.pressure*0.4 + (rnd(seed+4)-0.5)*10),22,95);
+  const bandConc = clamp(Math.round(45 + tp.pressure*0.5 + (rnd(seed+5)-0.5)*10),22,95);
+  const headShare = clamp(Math.round(42 + tp.pressure*0.45 + (rnd(seed+6)-0.5)*10),22,95);
+  const rentBear = clamp(Math.round(40 + (5-cd.rentLevel)*4 + tp.fit*0.4 + (rnd(seed+7)-0.5)*8),22,95);
+  const areaMatch = clamp(Math.round(45 + tp.fit*0.3 + (rnd(seed+8)-0.5)*8),22,95);
+  const license = clamp(Math.round(50 + (d.fmtKey==='餐饮'?-8:d.fmtKey==='医疗'?-14:6) + (rnd(seed+9)-0.5)*8),22,95);
+  const opsCx = clamp(Math.round(48 + (d.fmtKey==='餐饮'||d.fmtKey==='医疗'?6:2) + (rnd(seed+10)-0.5)*8),22,95);
+  return { demand,supplySide,external,peerDensity,bandConc,headShare,rentBear,areaMatch,license,opsCx };
+}
+function scoreDecompHTML(d){
+  const s=subScores(d);
+  return '<div class="rep-callout"><b>供需机会 '+d.scores.supply+' 分</b> = 0.40×需求端('+s.demand+') + 0.35×供给端('+s.supplySide+') + 0.25×外部因子('+s.external+')。需求端衡量该街道真实消费频次与客单承载力，供给端衡量已开店密度与可进入空间，外部因子含城市规划与人口流入。</div>'+
+    '<div class="rep-callout"><b>竞争压力 '+d.scores.pressure+' 分</b> = 0.40×同业密度('+s.peerDensity+') + 0.35×价格带集中度('+s.bandConc+') + 0.25×头部品牌占比('+s.headShare+')。三项越高代表红海程度越深，须用差异化或错位时段破解。</div>'+
+    '<div class="rep-callout"><b>开店适配 '+d.scores.fit+' 分</b> = 0.30×租金承受力('+s.rentBear+') + 0.25×面积匹配('+s.areaMatch+') + 0.20×证照难度('+s.license+') + 0.25×运营复杂度('+s.opsCx+')。租金承受力看保本额占营收比例，面积匹配看该业态标准店型与该街道铺源吻合度。</div>';
+}
+
+function execJudgments(d){ const s=d.scores;
+  const sd=s.supply>=70?'区域缺口明显，仍有可进入空间':s.supply>=55?'供需接近平衡，需靠差异化抢位置':'供给偏多，需极强差异化或成本优势';
+  const pd=s.pressure>=70?'竞争高度密集，价格战风险大':s.pressure>=55?'竞争中等，同质化已开始显现':'竞争相对友好，适合先小步试水';
+  const fd=s.fit>=70?'租金与营商环境适配度高':s.fit>=55?'适配度中等，需控租金':'适配度偏低，租金或合规压力较大';
+  return ['<b>供需机会 '+s.supply+' 分</b>：'+sd+'。','<b>竞争压力 '+s.pressure+' 分</b>：'+pd+'。','<b>开店适配 '+s.fit+' 分</b>：'+fd+'。','综合评分 <b>'+s.composite+' 分</b>，结论为 <b>'+s.verdict.txt+'</b>。', d.flavor+'（示例推断，需实地核验）。']; }
+function t3Suggestion(d){ const s=d.scores; if(s.supply<55&&s.pressure>=70) return '供给偏多、竞争强，建议换细分品类或换街道后再看，不宜硬进。'; if(s.fit<55) return '租金/合规压力较大，建议先以快闪或短租控成本试水，验证后再投固定成本。'; if(s.composite>=75) return '供需与适配均较优，可小步试水；建议先发内容测真实订单再定。'; return '机会中等，建议先做 1 周团购/内容测试，用最小成本验证真实需求。'; }
+
+function coverHTML(d){ const isT3=d.tier==='T3'; const scope=d.province+'·'+d.city+(d.district?'·'+d.district:'')+'·'+d.street;
+  const title='《'+d.biz+' 选址可行性深度研究报告（演示版）》';
+  const dateStr=new Date(d.ts).toISOString().slice(0,10);
+  return '<div class="rep-cover"><div class="rep-cover-kicker">选址可行性'+(isT3?'简报':'深度研究报告')+' · 演示版</div><h1 class="rep-title">'+title+'</h1><div class="rep-cover-meta">覆盖：'+scope+' ｜ 业态：'+d.biz+'（'+d.bizLabel+(isT3?' · T3 简版':'')+'）<br>生成时间：'+dateStr+'</div><div class="rep-cover-disclaimer">'+DISCLAIMERS.cover+'</div></div>'; }
+function metaHTML(d){ const dateStr=new Date(d.ts).toISOString().slice(0,10); return '<div class="rep-meta">选择条件：<b>'+d.province+'</b> · <b>'+d.city+(d.district?' · '+d.district:'')+'</b> · <b>'+d.street+'</b> · <b>'+d.biz+'</b> ｜ 生成时间：<b>'+dateStr+'</b> ｜ 演示版（示例数据）</div>'; }
+function execHTML(d){ const v=d.scores.verdict, vc=v.key==='go'?'v-go':v.key==='watch'?'v-watch':'v-no';
+  let h='<h2 class="rep-sec">执行摘要</h2><div style="text-align:center;margin:6px 0 12px"><span class="verdict '+vc+'">'+v.txt+'（综合评分 '+d.scores.composite+'）</span></div>'+scoreBars(d)+scoreDecompHTML(d);
+  if(d.tier==='T3'){ h+='<div class="rep-tip"><b>一句话建议：</b>'+t3Suggestion(d)+'</div>'; }
+  else {
+    h+='<h3 class="rep-h3">核心判断</h3><ul class="rep-list">'+
+      '<li><b>结论：</b>本街道（'+d.street+'，'+d.tag+'）综合评分 '+d.scores.composite+' 分，判定为「'+v.txt+'」。供需机会 '+d.scores.supply+' 分、竞争压力 '+d.scores.pressure+' 分、开店适配 '+d.scores.fit+' 分，三项均未触顶，留有余量。</li>'+
+      '<li><b>供需：</b>'+d.audience+'，中性日均客流约 '+d.fin.scenes.find(function(x){return x.name==='基准';}).traffic+' 人；客单价参考 '+d.fin.ticket+' 元，月营收上限约 '+fmtMoney(d.fin.scenes.find(function(x){return x.name==='乐观';}).rev)+' 元（乐观情景）。</li>'+
+      '<li><b>竞争：</b>示例：周边 500m 同业约 '+num(d.comp.peerTotal,0)+' 家，竞争强度'+levelText(d.scores.pressure)+'；红海集中在核心商圈主街，社区与产业辐射带仍有空白细分开口。</li>'+
+      '<li><b>租金：</b>'+formatRent(d.rent,d.area,d.rentUnit)+'，占基准营收约 '+Math.round(d.rent/(d.fin.scenes.find(function(x){return x.name==='基准';}).rev)*100)+'%；租金单价区间 '+d.rentRange[0]+'-'+d.rentRange[1]+' 元/㎡/月，谈判空间取决于铺源空置率。</li>'+
+      '<li><b>最适合：</b>街区类型为「'+d.tag+'」，主力客群为'+d.audience+'；经营方式建议「轻资产试营 + 单店模型跑通再扩」，避免重装修重押金先行投入。</li></ul>'+
+      '<h3 class="rep-h3">最大风险</h3><div class="rep-risk"><b>风险一（致命级）：</b>演示数据非真实，不能据此决策；若实地复核发现租金超过承受力 30% 以上或周边 3 个月内新开 3 家同类，应直接放弃进入。</div>'+
+      (d.scores.pressure>=70?'<div class="rep-risk"><b>风险二（致命级）：</b>竞争压力 '+d.scores.pressure+' 分偏高，价格战与同质化可能在 6 个月内击穿毛利，须以差异化产品 + 私域锁客为底线。</div>':'<div class="rep-risk"><b>风险二（可控级）：</b>租金与合规门槛（'+fmtMoney(d.rent)+'/月）影响单店模型，须实地复核转租条款与证照受理条件。</div>');
+  }
+  return h;
+}
+
+/* =========================================================
+   COMPETITION_MATRIX：竞品矩阵 4 象限（价格带 × 面积/档次）
+   ========================================================= */
+function competitionMatrix(d){
+  const hi = d.fin.ticket>=60;
+  const row1 = hi ? '连锁正餐 / 旗舰店（高客单·大面积，品牌溢价高、租金承受力强）' : '精品咖啡 / 轻奢零售（高客单·小面积，坪效优先、打卡属性强）';
+  const row2 = hi ? '社区超市 / 大排档（低客单·大面积，走量为主、复购托底）' : '奶茶 / 小吃 / 便民店（低客单·小面积，高频低价、点位取胜）';
+  return '<table class="rep-table"><thead><tr><th>价格带＼面积</th><th>大面积 / 高档次</th><th>小面积 / 低门槛</th></tr></thead><tbody>'+
+    '<tr><td><b>高客单</b></td><td>'+row1+'</td><td>'+row2+'</td></tr>'+
+    '<tr><td><b>低客单</b></td><td>社区生鲜 / 平价餐（走量·复购）</td><td>新零售自提 / 即时零售（低成本·高周转）</td></tr></tbody></table>'+
+    '<p class="rep-p">本街道（'+d.tag+'）落在矩阵中的位置：客单价 '+d.fin.ticket+' 元、典型面积 '+d.area+'㎡，对应'+(hi?'「高客单」行':'「低客单」行')+'；你的差异化切入应避开同业最密集的象限，选择空白价格带或错位时段。</p>';
+}
+
+/* =========================================================
+   PRODUCT_MIX_ADVICE：产品组合建议（引流 / 利润 / 防御）
+   ========================================================= */
+/* =========================================================
+   PRODUCT_MIX_ADVICE：产品/服务组合（引流 / 利润 / 防御），按业态模型切换表述
+   ========================================================= */
+function productMix(d){
+  const M=d.fin.model, t=num(d.fin.ticket,30);
+  if(M==='edu'){
+    return '<table class="rep-table"><thead><tr><th>角色</th><th>占比</th><th>预估毛利</th><th>定价区间</th><th>作用</th></tr></thead><tbody>'+
+      '<tr><td><b>引流款</b></td><td>20%</td><td>约 60%</td><td>9.9~19.9 元体验课</td><td>低门槛体验，沉淀到店与微信私域</td></tr>'+
+      '<tr><td><b>利润款</b></td><td>50%</td><td>约 70%</td><td>正价课包 '+Math.round(t*0.8)+'~'+Math.round(t*1.2)+' 元/课时</td><td>主力成交与续费来源，承接体验转化</td></tr>'+
+      '<tr><td><b>防御款</b></td><td>30%</td><td>约 55%</td><td>老带新/转介绍权益</td><td>提升续费与转介绍，阻挡同业挖角</td></tr></tbody></table>';
+  }
+  if(M==='service'){
+    const a=Math.round(t*0.5), b=Math.round(t*0.8), c=Math.round(t*1.2), e=Math.round(t*1.6);
+    return '<table class="rep-table"><thead><tr><th>角色</th><th>占比</th><th>预估毛利</th><th>定价区间</th><th>作用</th></tr></thead><tbody>'+
+      '<tr><td><b>引流款</b></td><td>20%</td><td>约 55%</td><td>'+a+'~'+b+' 元单项</td><td>低门槛到店，制造预约与到店频次</td></tr>'+
+      '<tr><td><b>利润款</b></td><td>50%</td><td>约 65%</td><td>'+b+'~'+c+' 元卡项/项目</td><td>主力成交与耗卡来源，承接复购</td></tr>'+
+      '<tr><td><b>防御款</b></td><td>30%</td><td>约 50%</td><td>'+c+'~'+e+' 元会员/套餐</td><td>锁客与会员黏性，阻挡同业价格战</td></tr></tbody></table>';
+  }
+  if(M==='community'){
+    return '<table class="rep-table"><thead><tr><th>角色</th><th>占比</th><th>预估毛利</th><th>定价区间</th><th>作用</th></tr></thead><tbody>'+
+      '<tr><td><b>引流款</b></td><td>25%</td><td>约 40%</td><td>便民低价/免费活动</td><td>建立社区信任与邻里传播</td></tr>'+
+      '<tr><td><b>利润款</b></td><td>45%</td><td>约 60%</td><td>托管/轻零售 '+Math.round(t*0.8)+'~'+Math.round(t*1.2)+' 元</td><td>日常现金流与复购基本盘</td></tr>'+
+      '<tr><td><b>防御款</b></td><td>30%</td><td>约 50%</td><td>健康/活动会员</td><td>提升频次与家庭渗透，阻挡替代</td></tr></tbody></table>';
+  }
+  // trade / generic
+  const leadP = Math.round(t*0.65), leadH=Math.round(t*0.85);
+  const profP = Math.round(t*1.0), profH=Math.round(t*1.2);
+  const defP = Math.round(t*1.3), defH=Math.round(t*1.5);
+  return '<table class="rep-table"><thead><tr><th>角色</th><th>占比</th><th>预估毛利</th><th>定价区间</th><th>作用</th></tr></thead><tbody>'+
+    '<tr><td><b>引流款</b></td><td>20%</td><td>约 50%</td><td>'+leadP+'~'+leadH+' 元</td><td>低门槛获新客，制造到店理由与社交传播</td></tr>'+
+    '<tr><td><b>利润款</b></td><td>50%</td><td>约 65%</td><td>'+profP+'~'+profH+' 元</td><td>主力成交与利润来源，承接引流转化</td></tr>'+
+    '<tr><td><b>防御款</b></td><td>30%</td><td>约 40%</td><td>'+defP+'~'+defH+' 元</td><td>提升客单与差异化，阻挡同业价格战侵蚀</td></tr></tbody></table>';
+}
+
+/* =========================================================
+   RISK_CLASSIFICATION：风险分级（致命 / 可控 / 波动）
+   ========================================================= */
+function riskClassification(d){
+  const fatal = d.scores.pressure>=70
+    ? '<li><b>致命（劝退级）：</b>竞争压力 '+d.scores.pressure+' 分，若周边 3 个月内新开 ≥3 家同业态且价格带重叠，直接放弃进入。</li>'
+    : '<li><b>致命（劝退级）：</b>若实地租金超过测算承受力 30% 以上，或餐饮/医疗类证照无法受理，直接放弃进入。</li>';
+  return '<h3 class="rep-h3">风险分级</h3><ul class="rep-list">'+
+    fatal+
+    '<li><b>可控（有解法）：</b>竞争强 → 用差异化产品 + 错位营业时段 + 私域锁客破解；租金高 → 以短租/快闪压低固定成本先验证模型。</li>'+
+    '<li><b>波动（看运气）：</b>旅游/季节因素（'+d.tag+'）、市政施工围挡、邻居业态变动，通过预留 2 个月现金缓冲应对。</li></ul>';
+}
+
+/* =========================================================
+   SENSITIVITY_ANALYSIS（报告第五章呈现）
+   ========================================================= */
+function sensitivityTable(d){
+  const sa=sensAnalysis(d.finPreset);
+  const deathTxt = sa.death
+    ? '<div class="rep-risk"><b>死亡区间：</b>租金上涨 20% 且 客单价下降 15% 同时发生时，基准情景月利润转为 <b>'+fmtMoney(sa.deathProfit)+' 元</b>（亏损）——三项中任意两项恶化即进入亏损区，须以保守情景为经营底线。</div>'
+    : '<div class="rep-tip"><b>安全边际：</b>基准情景月利润约 '+fmtMoney(sa.baseProfit)+' 元；租金+20% 且客单价-15% 同时发生仍盈利，模型韧性较强。</div>';
+  return '<h3 class="rep-h3">敏感性分析</h3><table class="rep-table"><thead><tr><th>变动项</th><th>影响指标</th><th>结果</th></tr></thead><tbody>'+
+    '<tr><td>租金 +20%</td><td>月保本营业额</td><td class="num">'+fmtMoney(sa.rentUpBE)+' 元</td></tr>'+
+    '<tr><td>租金 -20%</td><td>月保本营业额</td><td class="num">'+fmtMoney(sa.rentDownBE)+' 元</td></tr>'+
+    '<tr><td>客单价 +15%</td><td>月净利润</td><td class="num">'+fmtMoney(sa.profitUp)+' 元</td></tr>'+
+    '<tr><td>客单价 -15%</td><td>月净利润</td><td class="num">'+fmtMoney(sa.profitDown)+' 元</td></tr>'+
+    '<tr><td>日均单 +30%</td><td>回本周期</td><td>'+sa.pbUp+'</td></tr>'+
+    '<tr><td>日均单 -30%</td><td>回本周期</td><td>'+sa.pbDown+'</td></tr></tbody></table>'+deathTxt;
+}
+
+function ch1(d){ const cd=getCityData(d.city); const tp=TAG_PRESETS[d.tag]||TAG_PRESETS['居住社区'];
+  const level = cd.density>=1.5?'高能级中心城市':cd.density>=1.1?'中高能级区域中心':'区域消费中心城市';
+  const pop = cd.bias>=6?'本地家庭与务实消费为主、外来人口流入平缓':cd.bias>=0?'本地家庭 + 部分年轻流入、消费分层明显':'高密度通勤 + 外来消费混合、价格带跨度大';
+  const cons = cd.rentLevel>=4?'中高消费力、客单与品质敏感并存':cd.rentLevel>=3?'中等消费力、性价比与复购主导':'价格敏感、低频高价品类难起量';
+  const pos = d.tag==='核心商业'?'区域核心商业带，承接通勤与周末家庭及游客':d.tag==='居住社区'?'社区生活中心，复购型消费基本盘':d.tag==='产业片区'?'产业/校区辐射带，午晚高峰集中':'旅游/传统镇区，本地熟客与季节性客流并存';
+  const rP=clamp(60+tp.fit*0.3-Math.round(cd.density*5),35,80), oP=clamp(20+Math.round(cd.density*8),10,45), fP=100-rP-oP;
+  const roads=cd.roads; const trans='主干道 '+roads[0]+'、'+roads[2]+' 贯通，公交站点密集；'+((d.tag==='核心商业')?'地铁直达、停车紧张，依赖步行与公交换乘':'社区/产业带以自驾与电瓶车为主，停车位相对宽松')+'。';
+  const plan = (d.tag==='核心商业')?'新商业综合体与 TOD 开发持续推进，新增客流但同步抬升租金':'老旧小区改造与产业园新建并行，常住人口与工位双增';
+  return '<h2 class="rep-sec">第一章　城市与区域背景</h2><p class="rep-p">本报告细化到 <b>'+(d.district?d.district+'（'+d.city+'）':d.city)+'</b> 的 <b>'+d.street+'</b> 街道/商圈，属 <b>'+d.province+'</b>。<b>'+d.city+'</b> 城市商业能级定位为 '+level+'（商业密度系数 '+cd.density+'）。该区县人口结构以 '+pop+'，消费力为 '+cons+'，商业密度处于'+levelText(d.scores.pressure)+'竞争区间。</p>'+
+    '<p class="rep-p"><b>'+d.street+'</b>（'+d.tag+'）在区县内的商业定位为：'+pos+'。周边 500m 人口画像测算：居住 '+rP+'% / 办公 '+oP+'% / 流动 '+Math.max(0,fP)+'%，主力年龄 25–45 岁占比约 '+clamp(55+Math.round(cd.bias*0.5),45,70)+'%，构成稳定到店基本盘。交通与可达性：'+trans+'</p>'+
+    '<p class="rep-p">近期区域规划影响：'+plan+'。对租金与客流的净效应为'+(d.tag==='核心商业'?'租金上行、客流增量有限，进入窗口收窄':'客流与铺源同步增加，存在先发卡位机会')+'。本街道坐标约 <b>'+d.center[1].toFixed(4)+'°N, '+d.center[0].toFixed(4)+'°E</b>（示例）。</p>'+
+    '<div class="rep-callout">说明：以上城市与人群数据为演示版示例，真实版将接入行政区划、人口结构与商圈粒度数据交叉校验。省份/城市仅作范围，不对全市做笼统结论。</div>'; }
+
+function ch2(d){ const M=d.fin.model; const t=num(d.fin.ticket,30); const tp=TAG_PRESETS[d.tag]||TAG_PRESETS['居住社区'];
+  const main = d.audience;
+  const sub = d.tag==='核心商业'?'通勤白领与周末家庭':d.tag==='居住社区'?'周边常住家庭':d.tag==='产业片区'?'产业工人与学校群体':'游客与周末居住客';
+  const edge = d.tag==='旅游居住'?'过路游客（一次性）':'价格极度敏感的次级客群';
+  const hours = d.tag==='产业片区'?'午市 11–13 点与晚市 17–20 点双高峰，周末回落':d.tag==='核心商业'?'全天分布，晚市与周末为峰':d.tag==='旅游居住'?'周末与节假日为峰、工作日平淡':'早中晚三档均匀，晚市略强';
+  let freq, logic, online, onlineNote;
+  if(M==='edu'){
+    freq='中低频（周均 1–2 次到店，月频 '+(d.fin.extras.freq||8)+' 次）';
+    logic='学区/社区家庭为主，结果导向、续费驱动；有同行=需求被验证，无同行=需先验证需求';
+    online=20; onlineNote='私域社群/转介绍为主，平台抽成低';
+  } else if(M==='service'){
+    freq='中频（月均 2–4 次，会员耗卡驱动）';
+    logic='便利性 + 信任 + 复购（美业/健身/护理），重人效与预约饱和';
+    online=15; onlineNote='团购/到家平台占比可控，私域会员承接复购';
+  } else if(M==='community'){
+    freq='中频（周均 1–2 次，时段错峰）';
+    logic='常住家庭、低频高信任，老人/儿童动线与物业关系是关键';
+    online=10; onlineNote='邻里传播为主，轻线上化';
+  } else {
+    freq = M==='trade'?(t<30?'高频（日均 1–2 次）':'高频（周均 2–3 次）'):'中频（周均 1 次）';
+    logic='即时性消费，复购与时段/外卖半径决定天花板';
+    online = M==='trade'?30:20; onlineNote='外卖/自提占比可控，私域会员承接复购';
+  }
+  return '<h2 class="rep-sec">第二章　业态机会分析</h2><p class="rep-p">所选业态为 <b>'+d.biz+'（'+d.bizLabel+'）</b>。需求逻辑：本街道为「'+d.tag+'」类型，'+main+'，'+logic+'。消费频次：'+freq+'；客单价区间参考 <b>'+Math.round(t*0.7)+'~'+Math.round(t*1.3)+' 元</b>（基准 '+t+' 元），由周边人群画像与价格带空档共同决定。</p>'+
+    '<p class="rep-p"><b>客群细分：</b>主力客群为'+main+'；次主力客群为'+sub+'；边缘客群为'+edge+'。产品组合建议如下（具体可落地）：</p>'+productMix(d)+
+    '<p class="rep-p"><b>营业时段：</b>'+hours+'。<b>线上/外卖/私域：</b>该街道适配度约 '+online+'%，'+onlineNote+'，避免被平台抽成侵蚀毛利。</p>'; }
+
+function ch3(d){ const c=d.comp;
+  const distRows=c.counts.map(function(x){ return '<tr><td>'+x.label+'</td><td class="num">'+x.count+' 家</td><td class="num">'+Math.round(x.count/c.peerTotal*100)+'%</td></tr>'; }).join('');
+  const blank = c.blankCats.length ? c.blankCats.join('、') : '无（六大业态均有覆盖）';
+  const ck = CATS_KEY_OF(d.biz);
+  const tagsLine = (ck && CATEGORY_TAGS[ck]) ? '<p class="rep-p"><b>'+d.biz+' 细分品类标签（示例）：</b>'+CATEGORY_TAGS[ck].join('、')+'。竞争细化须按这些标签拆分（如餐饮按菜系/价格带/时段/外卖适配；教培按学科/年龄/成果；生活服务按项目/客单/频次），不能只数总数——聚合掩盖了错位机会。</p>' : '';
+  return '<h2 class="rep-sec">第三章　竞争与供给结构</h2>'+
+    '<p class="rep-p">本街道 500m 内同业门店合计 <b>'+c.peerTotal+' 家</b>。所选业态 <b>'+d.biz+'</b> 的直接竞品（同业态）约 <b>'+c.targetPeers+' 家</b>，品类集中度 <b>'+c.concentration+'%（'+c.concLabel+'）</b>。互补业态（带来人流的不同业态）约 <b>'+c.complement+' 家</b>。竞争判断：'+c.label+'。</p>'+
+    '<h3 class="rep-h3">细分品类分布（500m 同业结构）</h3>'+
+    '<table class="rep-table"><thead><tr><th>业态</th><th class="num">门店数</th><th class="num">占比</th></tr></thead><tbody>'+distRows+'</tbody></table>'+
+    tagsLine+
+    '<p class="rep-p"><b>空白品类：</b>'+blank+'。</p>'+
+    '<h3 class="rep-h3">竞品矩阵（价格带 × 面积/档次）</h3>'+competitionMatrix(d)+
+    '<div class="rep-callout"><b>你的差异化切入策略：</b>'+c.advice+'。正式版将用高德 POI 按品类标签分组检索周边 N 米同类/替代业态，输出精确数量、空白坐标与价格带重叠度。</div>'; }
+
+function ch4(d){ const cd=getCityData(d.city);
+  const cards=d.areas.map(function(a){
+    const 临街 = a.tag==='核心商业'?'临主街、昭示性强':'社区底商、可见性中等';
+    const 停车 = a.tag==='核心商业'?'停车紧张':'停车位宽松';
+    return '<div class="area-card"><p class="a-name">'+a.name+'</p><p class="a-coord">示意坐标：'+a.coordText+'（演示·非实时）</p><p class="a-verdict">'+临街+'；可达性：步行/公交可达；'+停车+'；邻居业态与本地生活配套互补（示例判断，需实地走盘）。</p></div>';
+  }).join('');
+  const matrixRows=d.areas.map(function(a){ const f=computeFin(a.finPreset); const m=a.finPreset.model; const unit=m==='edu'?' 课次':m==='service'?' 客次':m==='community'?' 人次':' 单'; return '<tr><td>'+a.name+'</td><td class="num">'+fmtMoney(a.rent)+'（'+a.area+'㎡/'+a.rentUnit+'）</td><td class="num">'+num(f.breakEvenTraffic)+unit+'</td><td>'+levelText(a.scores.pressure)+'</td><td class="num">'+a.scores.fit+'</td></tr>'; }).join('');
+  const best=d.areas.slice().sort(function(x,y){return y.scores.composite-x.scores.composite;})[0];
+  return '<h2 class="rep-sec">第四章　点位模拟评估</h2><p class="rep-p">以下为同区县 '+d.areas.length+' 个候选片区/门面位置的示意评估（坐标基于 '+d.city+' 中心合理偏移，非真实 POI）：</p>'+cards+
+    '<h3 class="rep-h3">点位对比矩阵</h3><table class="rep-table"><thead><tr><th>点位</th><th>租金（面积/单价）</th><th>保本日口径</th><th>竞争</th><th>适配</th></tr></thead><tbody>'+matrixRows+'</tbody></table>'+
+    '<div class="rep-callout"><b>最优点位推荐：</b>综合评分最高的 <b>'+best.name+'</b>（'+best.scores.composite+' 分）作为首选卡位，其次按租金承受力与可见性排序；正式版将接入高德真实门牌与铺源空置数据细化到路段级。</div>'; }
+
+function ch5(d){ const f=d.fin, p=d.finPreset, sa=sensAnalysis(p), M=f.model;
+  const modelTitle = M==='edu'?'（教培托管模型：在册学员 × 月频次 × 课单价，重续费与满班率）'
+    : M==='service'?'（生活服务模型：客次 × 客单价，重人效与预约饱和）'
+    : M==='community'?'（社区便民模型：分模块收入叠加，重复购与邻里信任）'
+    : M==='generic'?'（通用经营模型：单量 × 客单价估值）'
+    : '（餐饮/零售/茶饮快餐模型：单量 × 客单价，重保本单量）';
+  // 月固定成本明细（全程 num()/pct() 防护，绝不 NaN）
+  const detailRows='<tr><td>面积 / 租金单价</td><td>'+d.area+'㎡ / '+d.rentUnit+' 元/㎡/月</td></tr>'+
+    '<tr><td>月租金（面积 × 单价）</td><td class="num">'+formatRent(d.rent,d.area,d.rentUnit)+'</td></tr>'+
+    '<tr><td>月人工</td><td class="num">'+fmtMoney(f.labor)+' 元（'+num(f.staff)+' 人 × '+fmtMoney(f.wage)+'）</td></tr>'+
+    '<tr><td>装修+设备折旧（月均摊）</td><td class="num">'+fmtMoney(f.fitoutMonthly)+' 元</td></tr>'+
+    '<tr><td>水电杂费</td><td class="num">'+fmtMoney(f.util)+' 元</td></tr>'+
+    '<tr><td>原料/变动成本占比 / 平台抽成</td><td>'+num(p.costPct)+'% / '+num(p.platformPct)+'%</td></tr>'+
+    '<tr><td class="hl">月固定成本合计</td><td class="num hl">'+fmtMoney(f.monthlyFixed)+' 元</td></tr>'+
+    '<tr><td class="hl">毛利率/贡献毛利</td><td class="num hl">'+pct(f.margin*100)+'</td></tr>'+
+    '<tr><td class="hl">月保本营业额</td><td class="num hl">'+fmtMoney(f.breakEvenRev)+' 元</td></tr>'+
+    (M==='edu'
+      ? '<tr><td>在册学员 / 满班率</td><td class="num">'+num(f.extras.students)+' 人 / '+pct(f.extras.fullRate)+'</td></tr>'+
+        '<tr><td>续费率 / 月频次</td><td class="num">'+pct(f.extras.renewPct)+' / '+num(f.extras.freq)+' 次·月</td></tr>'+
+        '<tr><td class="hl">保本学员数（教培口径·示例）</td><td class="num hl">'+num(f.extras.breakEvenStudents)+' 人</td></tr>'+
+        '<tr><td colspan="2" style="font-size:12px;color:#6b7280;line-height:1.6">业态测算口径：教培托管按「在册学员 × 月频次 × 课单价」估算保本学员数（示例），非餐饮式单量；等效日服务量请以日均到访人次折算。</td></tr>'
+      : M==='service'
+        ? '<tr><td>会员占比 / 预约率</td><td class="num">'+pct(f.extras.memberPct)+' / '+pct(f.extras.bookRate)+'</td></tr>'+
+          '<tr><td>人效（营收/人力，倍）</td><td class="num">'+num(f.extras.manEff)+'</td></tr>'+
+          '<tr><td class="hl">'+f.breakEvenUnit.label+'</td><td class="num hl">'+f.breakEvenUnit.value+'</td></tr>'
+        : M==='community'
+          ? '<tr><td>分模块收入占比</td><td>'+f.extras.modules.map(function(m){return m.name+' '+m.pct+'%';}).join(' · ')+'</td></tr>'+
+            '<tr><td class="hl">'+f.breakEvenUnit.label+'</td><td class="num hl">'+f.breakEvenUnit.value+'</td></tr>'
+          : '<tr><td class="hl">'+f.breakEvenUnit.label+'</td><td class="num hl">'+f.breakEvenUnit.value+'</td></tr>')+
+    '<tr><td>初始投入（押金+装修+设备，示例）</td><td class="num">'+fmtMoney(f.initial)+' 元</td></tr>';
+  const sceneRows=f.scenes.map(function(sc){return '<tr><td>'+sc.name+'</td><td class="num">'+sc.traffic+'</td><td class="num">'+fmtMoney(sc.rev)+'</td><td class="num">'+fmtMoney(sc.profit)+'</td><td class="num">'+sc.payback+'</td></tr>';}).join('');
+  const margin = (f.scenes[1].profit>0)?'基准情景月利润约 '+fmtMoney(sa.baseProfit)+' 元，安全边际为正，可覆盖租金与人工波动。':'基准情景已逼近盈亏平衡，安全边际薄，须以保守情景为经营底线。';
+  // 敏感性行：通用轴（租金±20% / 客单价±15% / 单量±30%）+ 模型专属轴
+  const sensRows = [
+    '<tr><td>租金 +20%</td><td>月保本营业额</td><td class="num">'+fmtMoney(sa.rentUpBE)+' 元</td></tr>',
+    '<tr><td>租金 -20%</td><td>月保本营业额</td><td class="num">'+fmtMoney(sa.rentDownBE)+' 元</td></tr>',
+    '<tr><td>客单价 +15%</td><td>月净利润</td><td class="num">'+fmtMoney(sa.profitUp)+' 元</td></tr>',
+    '<tr><td>客单价 -15%</td><td>月净利润</td><td class="num">'+fmtMoney(sa.profitDown)+' 元</td></tr>',
+    '<tr><td>日均单/人次 +30%</td><td>回本周期</td><td>'+sa.pbUp+'</td></tr>',
+    '<tr><td>日均单/人次 -30%</td><td>回本周期</td><td>'+sa.pbDown+'</td></tr>'
+  ];
+  (sa.modelRows||[]).forEach(function(mr){ sensRows.push('<tr><td>'+mr.label+'</td><td>'+mr.impact+'</td><td class="num">'+mr.value+'</td></tr>'); });
+  const deathTxt = sa.death
+    ? '<div class="rep-risk"><b>死亡区间：</b>租金上涨 20% 且 客单价下降 15% 同时发生时，基准情景月利润转为 <b>'+fmtMoney(sa.deathProfit)+' 元</b>（亏损）——三项中任意两项恶化即进入亏损区，须以保守情景为经营底线。</div>'
+    : '<div class="rep-tip"><b>安全边际：</b>基准情景月利润约 '+fmtMoney(sa.baseProfit)+' 元；即使租金+20% 且客单价-15% 同时发生，仍维持盈利，模型韧性较强。</div>';
+  return '<h2 class="rep-sec">第五章　财务测算模型（展开版）</h2>'+
+    '<p class="rep-p" style="font-size:12.5px;color:#9aa3b2">以下为示例参数，按街道特征推算（面积 '+d.area+'㎡ × 单价 '+d.rentUnit+' 元/㎡/月 = '+fmtMoney(d.rent)+' 元/月），非真实经营数据；面板内可调参数实时重算。'+modelTitle+'</p>'+
+    '<h3 class="rep-h3">参数设定与月固定成本明细</h3><table class="rep-table"><tbody>'+detailRows+'</tbody></table>'+
+    '<h3 class="rep-h3">三档情景详细测算</h3><table class="rep-table"><thead><tr><th>情景</th><th class="num">日均/日客次</th><th class="num">月营业额</th><th class="num">月利润</th><th class="num">回本周期</th></tr></thead><tbody>'+sceneRows+'</tbody></table>'+
+    '<h3 class="rep-h3">敏感性分析（含业态专属轴）</h3><table class="rep-table"><thead><tr><th>变动项</th><th>影响指标</th><th>结果</th></tr></thead><tbody>'+sensRows.join('')+'</tbody></table>'+deathTxt+
+    '<div class="rep-callout"><b>安全边际：</b>'+margin+'</div>'; }
+
+function ch6(d){ return '<h2 class="rep-sec">第六章　经营策略建议</h2><ul class="rep-list">'+
+    '<li><b>开业前：</b>完成选址确认清单（可见性/可达性/邻居业态）、装修侧重动线与明档、办理'+((d.fmtKey==='餐饮'||d.fmtKey==='医疗')?'食品经营/医疗类':'营业执照与卫生')+'证照、搭建 2 家以上供应链比价。</li>'+
+    '<li><b>开业期：</b>试营业 2–4 周测真实客流；定价以利润款为主、引流款限时限量；首批客群通过社区团购 + 内容曝光获取，目标首月复购率 ≥25%。</li>'+
+    '<li><b>稳定期：</b>会员体系锁复购（月复购 ≥3 次享权益）、线上占比控制在 15–35%、坪效考核 ≥'+Math.round(d.fin.breakEvenRev/30/d.area)+' 元/㎡/日。</li>'+
+    '<li><b>关键指标监控：</b>日销 / 客单 / 复购率 / 坪效 / 人效，达标线分别为 ≥'+fmtMoney(d.fin.breakEvenRev/30)+' 元、≥'+d.fin.ticket+' 元、≥25%、覆盖月固定、人效 ≥'+fmtMoney(d.fin.labor/(d.fin.staff||1)*1.5)+' 元。</li>'+
+    '<li><b>扩张信号：</b>连续 3 个月基准情景利润为正且坪效达标，周边 1 公里无同业态新增，则可考虑开二店或换大店。</li></ul>'; }
+
+function ch7(d){ return '<h2 class="rep-sec">第七章　风险与退出条件</h2>'+riskClassification(d)+
+    '<h3 class="rep-h3">退出条件与方式</h3><ul class="rep-list">'+
+    '<li><b>止损线：</b>月营收连续 2 个月低于保本营业额 70%（即 <'+fmtMoney(d.fin.breakEvenRev*0.7)+' 元）→ 启动退出评估。</li>'+
+    '<li><b>退出方式：</b>优先转租/转让回血，其次缩面积降固定成本，最后换业态；租约中须保留转租权与提前解约条款。</li></ul>'; }
+
+function comparisonSection(d){
+  const others=STATE.spots.filter(function(x){return x.name!==d.street;});
+  const otherStreets = others.map(function(x){return x.name;});
+  const otherInds=['餐饮零售','教培托管','生活服务','社区便民','便利店/茶饮快餐','其他'].filter(function(x){return x!==d.biz;});
+  const hooks=[
+    { axis:'同街道不同业态', items:otherInds.slice(0,3), reason:'同一条街道不同业态的客流与租金承受力差异明显，可找互补而非竞争的品类。' },
+    { axis:'同区县不同街道', items:(otherStreets.length?otherStreets.slice(0,3):[d.district||d.city]), reason:'同区县不同街道的租金/客流结构不同，核心商圈贵但流量大、社区便宜但复购稳。' },
+    { axis:'跨省/跨城对比', items:[ (STATE.province||'北京')+'·'+d.street, '太原·小店区·亲贤街商圈', '北京·朝阳·国贸' ], reason:'不同城市同业态的供给密度与消费力差距大，跨城对比可判断哪里更适合进入。' }
+  ];
+  const hookRows=hooks.map(function(h){ return '<tr><td>'+h.axis+'</td><td>'+(h.items.join(' / ')||'—')+'</td><td>'+h.reason+'</td></tr>'; }).join('');
+  const priceRows=PRICING_TIERS.map(function(t){return '<tr><td>'+t.name+'</td><td>'+t.note+'</td><td class="num">'+t.price+'</td></tr>';}).join('');
+  return '<h2 class="rep-sec">第八章　对比建议（正式版能力预览）</h2><div class="rep-callout">网页版仅按单街道出报告，不对全市/全省做笼统结论。以下为正式版「对比」能力预览（网页不收费）。每条对比正式版小程序支持一键对比，按次 1 元起。</div>'+
+    '<table class="rep-table"><thead><tr><th>对比维度</th><th>示例（以本次选择推演）</th><th>一句话理由</th></tr></thead><tbody>'+hookRows+'</tbody></table>'+
+    '<h3 class="rep-h3">正式版定价（网页不收费）</h3><table class="rep-table"><thead><tr><th>档位</th><th>说明</th><th class="num">价格</th></tr></thead><tbody>'+priceRows+'</tbody></table>'+
+    '<div class="rep-tip">想对比其他街道/业态？正式版支持无限次查询 + 深度报告，按查询深度分级收费，不按省份数量线性加价。</div>'; }
+function appendixHTML(d){ const w=SCORING_MODEL.weight; return '<h2 class="rep-sec">附录</h2><div class="rep-appendix">'+
+  '<h3>一、数据说明</h3><p>本报告为演示版，城市档案、街道点位、财务参数均为示例数据，非真实 POI / 工商 / 客流 / 租金数据，仅用于展示产品形态与分析方法。分析细化到街道/商圈级别，不对整个省/市做笼统结论。正式版将接入高德真实数据（高德POI+工商+平台数据）。</p>'+
+  '<h3>二、评分方法论</h3><p>三维度：供需机会（越高越好）、竞争压力（越高越坏）、开店适配（越高越好）。综合分 = '+(w.supply*100)+'×供需 + '+(w.pressure*100)+'×(100−竞争) + '+(w.fit*100)+'×适配。≥75 建议进入 / 60–74 谨慎进入 / &lt;60 暂不推荐。评分已避免极端值以保留对比空间。</p>'+
+  '<h3>三、术语</h3><p>保本营业额 = 月固定成本 ÷ 毛利率；回本周期 = 初始投入 ÷ 月利润；供需机会 = 需求相对供给的缺口程度（示例）。租金全链路格式：月租金 = 面积 × 街道单价。</p>'+
+  '<h3>四、免责声明</h3><p>'+DISCLAIMERS.foot+' 本报告为辅助决策工具，不构成投资或经营保证，不保证盈利，不替代实地调研与专业判断。</p>'+
+  '</div>'; }
+
+function buildReportData(spot){
+  const tier=INDUSTRY_TIERS[STATE.biz]?INDUSTRY_TIERS[STATE.biz].tier:'T3';
+  const fmtKey=PRODUCT_TO_FMT[STATE.biz]||'其他';
+  const cd=getCityData(STATE.city);
+  const fin=computeFin(spot.finPreset);
+  const areas=STATE.spots.map(function(s){ return { name:s.name+'（'+s.tag+'）', tag:s.tag, coord:[s.coord[1],s.coord[0]], coordText:s.coord[1].toFixed(4)+'°N, '+s.coord[0].toFixed(4)+'°E', verdict:s.desc+'（示例判断，需实地核验）', scores:s.scores, finPreset:s.finPreset, rent:s.rent, area:s.area, rentUnit:s.rentUnit }; });
+  return { province:STATE.province, city:STATE.city, district:STATE.district, street:spot.name, tag:spot.tag,
+    biz:STATE.biz, bizLabel:FMT[fmtKey].label, tier:tier, fmtKey:fmtKey, ts:Date.now(), center:spot.coord,
+    density:cd.density, rent:cd.rent, flavor:cd.flavor, audience:spot.audience, scores:spot.scores,
+    fin:fin, finPreset:spot.finPreset, rent:spot.rent, area:spot.area, rentUnit:spot.rentUnit, rentRange:spot.rentRange,
+    cats:spot.cats, comp:spot.comp,
+    areas:areas, advices:[], risks:[], exitCond:[] };
+}
+function renderReport(d){
+  let body=execHTML(d);
+  if(d.tier!=='T3'){ body+=ch1(d)+ch2(d)+ch3(d)+ch4(d)+ch5(d)+ch6(d)+ch7(d); }
+  body+=comparisonSection(d)+appendixHTML(d);
+  const acts='<div class="report-acts no-print"><button class="btn print" id="printBtn">打印 / 保存 PDF</button><button class="btn ghost" id="viewLast">重新查看上次报告</button></div>';
+  return '<div class="report-doc" id="report">'+metaHTML(d)+coverHTML(d)+body+acts+'</div>';
+}
+
+/* =========================================================
+   REPORT_LIMIT：每用户免费生成 1 份完整报告
+   ========================================================= */
+const LS_REPORT_DONE='qsy_report_generated', LS_REPORT_LAST='qsy_last_report';
+function generateReport(spot){
+  if(lsGet(LS_REPORT_DONE)==='1'){ showAlreadyReport(); return; }
+  const d=buildReportData(spot);
+  paintReport(d);
+  lsSet(LS_REPORT_DONE,'1'); lsSet(LS_REPORT_LAST, JSON.stringify({d:d}));
+}
+function paintReport(d){
+  const box=document.getElementById('result');
+  box.innerHTML=renderReport(d); box.classList.add('on');
+  const pb=document.getElementById('printBtn'); if(pb) pb.addEventListener('click',function(){ window.print(); });
+  const vl=document.getElementById('viewLast'); if(vl) vl.addEventListener('click',function(){ const last=lsGet(LS_REPORT_LAST); if(last){ try{ box.innerHTML=renderReport(JSON.parse(last).d); box.classList.add('on'); }catch(e){ toast('上次报告读取失败'); } } });
+  const rep=document.getElementById('report'); if(rep&&rep.scrollIntoView) rep.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function showAlreadyReport(){
+  const box=document.getElementById('result'); const last=lsGet(LS_REPORT_LAST);
+  box.innerHTML='<div class="regen">演示版已体验，正式小程序将支持真实数据+按次付费。'+(last?'<div style="margin-top:10px"><button class="btn" id="viewLast2" style="width:auto;padding:10px 18px">查看上次报告</button></div>':'')+'</div>';
+  box.classList.add('on');
+  const v2=document.getElementById('viewLast2'); if(v2) v2.addEventListener('click',function(){ try{ const dd=JSON.parse(last).d; const bx=document.getElementById('result'); bx.innerHTML=renderReport(dd); bx.classList.add('on'); if(document.getElementById('report')) document.getElementById('report').scrollIntoView({behavior:'smooth'}); }catch(e){ toast('上次报告读取失败'); } });
+  if(box&&box.scrollIntoView) box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* =========================================================
+   交互：省→市→区县 下钻
+   ========================================================= */
+const $prov=document.getElementById('province'),$city=document.getElementById('city'),$dist=document.getElementById('district'),$biz=document.getElementById('biz'),$go=document.getElementById('go'),$load=document.getElementById('loading'),$err=document.getElementById('errCity');
+function fillSelect(sel,arr,ph){ sel.innerHTML=''; if(ph){ const o=document.createElement('option'); o.value=''; o.textContent=ph; sel.appendChild(o); } arr.forEach(function(v){ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); }); }
+function onProvince(){ const p=$prov.value; if(!p){ fillSelect($city,[],'请先选择省份'); fillSelect($dist,[],'不限定（默认首选项）'); return; } fillSelect($city,PROVINCE_CITY_MAP[p].cities,'请选择城市/城区'); onCity(); }
+function onCity(){ const c=$city.value; fillSelect($dist, CITY_DISTRICT_MAP[c]||[], '不限定（默认首选项）'); }
+$prov.addEventListener('change',onProvince); $city.addEventListener('change',onCity); onProvince();
+$go.addEventListener('click',function(){ $load.classList.add('on'); document.getElementById('mapStage').classList.remove('on'); setTimeout(showCandidates,420); });
+document.getElementById('backSel').addEventListener('click',function(){ document.getElementById('mapStage').classList.remove('on'); window.scrollTo({top:0,behavior:'smooth'}); });
+
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+let _tt=null; function toast(m){ let el=document.getElementById('__toast'); if(!el){ el=document.createElement('div'); el.id='__toast'; el.style.cssText='position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:rgba(17,24,39,.92);color:#fff;font-size:14px;padding:11px 16px;border-radius:8px;z-index:1300;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center'; document.body.appendChild(el); } el.textContent=m; el.style.opacity='1'; if(_tt) clearTimeout(_tt); _tt=setTimeout(function(){ el.style.opacity='0'; },2000); }
+
+</script>
+</body>
+</html>
